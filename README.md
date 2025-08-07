@@ -8,19 +8,32 @@ Avoid using this README file for information that is maintained or published els
 Use links instead.
 -->
 
-# charm-forgejo
+# forgejo-k8s-operator
 
-Charmhub package name: operator-template
-More information: https://charmhub.io/charm-forgejo
+Charmed k8s operator for forgejo.
 
-Describe your charm in one or two sentences.
 
-## Other resources
+## Expected to be used with
 
-<!-- If your charm is documented somewhere else other than Charmhub, provide a link separately. -->
+* Postgresql (or pgbouncer) for the database backend
+* Traefik for ingress
 
-- [Read more](https://example.com)
+Example:
 
-- [Contributing](CONTRIBUTING.md) <!-- or link to other contribution documentation -->
+```sh
+juju deploy forgejo-k8s
+juju deploy postgresql-k8s --channel=14/stable
+juju deploy traefik-k8s --config routing_mode=subdomain
 
-- See the [Juju SDK documentation](https://juju.is/docs/sdk) for more information about developing and improving charms.
+juju integrate forgejo-k8s postgresql-k8s
+juju integrate forgejo-k8s traefik-k8s
+```
+
+```console
+Unit               Workload  Agent  Address      Ports  Message
+forgejo-k8s/0*     active    idle   10.1.131.36
+postgresql-k8s/0*  active    idle   10.1.131.7          Primary
+traefik-k8s/0*     active    idle   10.1.131.37         Serving at forgejo.internal
+````
+
+
