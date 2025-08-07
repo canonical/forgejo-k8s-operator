@@ -1,6 +1,6 @@
 type: charm
-name: charm-forgejo
-title: Charm Forgejo
+name: forgejo-k8s
+title: Forgejo K8s Operator
 summary: Charmed Kubernetes operator for Forgejo.
 description: |
   Deploy and configure the software forge, Forgejo.

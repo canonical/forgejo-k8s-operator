@@ -49,7 +49,6 @@ class CharmForgejoCharm(ops.CharmBase):
         super().__init__(framework)
         self._port = PORT
         self.set_ports()
-        # self.unit.set_ports(PORT, 2222)
 
         # traefik ingress support
         self.ingress = IngressPerUnitRequirer(
@@ -135,22 +134,6 @@ class CharmForgejoCharm(ops.CharmBase):
     def _on_pebble_ready(self, _: ops.PebbleReadyEvent) -> None:
         """Handle pebble-ready event."""
         self._update_layer_and_restart()
-        # # Create a user named root (admin is blacklisted)
-        # self.unit.status = ops.MaintenanceStatus("creating root user")
-        # logger.info("Creating root user")
-        # user_creation_output, _ = self.container.exec([
-        #     FORGEJO_CLI,
-        #     "admin", f"--config=CUSTOM_FORGEJO_CONFIG", "user", "create",
-        #     "--username", "root",
-        #     "--password", "root",
-        #     "--email", "root@localhost.com"
-        # ], user="git").wait_output()
-
-        # if "successfully created" in user_creation_output or "user already exists" in user_creation_output:
-        #     self.unit.status = ops.ActiveStatus()
-        # else:
-        #     self.unit.status = ops.BlockedStatus("Could not create root user")
-        #     logger.error(f"Could not create root user, got {user_creation_output}")
 
     def _on_config_changed(self, _: ops.ConfigChangedEvent) -> None:
         self._update_layer_and_restart()
@@ -291,19 +274,6 @@ class CharmForgejoCharm(ops.CharmBase):
         We need to get the url that traefik will use and set Forgejo's ROOT url to that, this will override and ignore
         the domain set in the charm config.
         """
-        # domain = None
-        # relations = self.ingress.fetch_relation_data()
-        # logger.debug('Got following ingress data: %s', relations)
-        # for data in relations.values():
-        #     if not data:
-        #         continue
-        #     traefik_url = data['ingress'][self.unit]['url']
-        #     logger.info('Traefik URL is %s', traefik_url)
-        #     try:
-        #         domain = urlparse(traefik_url).netloc
-        #     except Exception as e:
-        #         logger.error('%s, could not parse domain from url %s', e, traefik_url)
-        # return domain
         domain = None
         traefik_url = self.ingress.url
         logger.debug('Got following url from ingress data: %s', traefik_url)

@@ -13,7 +13,7 @@ from typing import Dict
 
 logger = logging.getLogger(__name__)
 
-def random_token(length: int = 32) -> str:
+def random_token(length: int = 44) -> str:
     return secrets.token_urlsafe(length)[:length]
 
 def generate_config(
@@ -38,20 +38,7 @@ def generate_config(
         "RUN_MODE": "prod"
     }
 
-    if database_info:
-        config["database"] = database_info
-    # else:
-    #     config["database"] = {
-    #         "DB_TYPE": "sqlite3",
-    #         "HOST": "127.0.0.1:3306",
-    #         "NAME": "forgejo",
-    #         "USER": "forgejo",
-    #         "PASSWD": "",
-    #         "SCHEMA": "",
-    #         "SSL_MODE": "disable",
-    #         "PATH": "/data/gitea/data/forgejo.db",
-    #         "LOG_SQL": "false"
-    #     }
+    config["database"] = database_info
 
     config["repository"] = {
         "ROOT": "/data/gitea/data/forgejo-repositories"
@@ -66,10 +53,8 @@ def generate_config(
         "APP_DATA_PATH": "/data/gitea/data",
         "DISABLE_SSH": "false",
         "SSH_PORT": "22",
-        # "SSH_PORT": "2222",
-        # "START_SSH_SERVER": "true",
         "LFS_START_SERVER": "true",
-        "LFS_JWT_SECRET": f"`{random_token(length=44)}`",
+        "LFS_JWT_SECRET": f"`{random_token()}`",
         "OFFLINE_MODE": "true",
     }
 
@@ -128,7 +113,7 @@ def generate_config(
     }
 
     config["oauth2"] = {
-        "JWT_SECRET": f"`{random_token(length=44)}`",
+        "JWT_SECRET": f"`{random_token()}`",
     }
 
     config["metrics"] = {
