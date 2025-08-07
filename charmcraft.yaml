@@ -1,0 +1,96 @@
+type: charm
+name: charm-forgejo
+title: Charm Forgejo
+summary: Charmed Kubernetes operator for Forgejo.
+description: |
+  Deploy and configure the software forge, Forgejo.
+
+base: ubuntu@22.04
+platforms:
+  amd64:
+  arm64:
+
+requires:
+  database:
+    interface: postgresql_client
+    limit: 1
+    optional: false
+    description: |
+      Integration to obtain an database backend for Foregjo.
+  logging:
+    interface: loki_push_api
+    optional: true
+    description: |
+      Integration to push logs for loki typically through grafana-agent.
+  ingress:
+    interface: ingress_per_unit
+    optional: true
+    limit: 1
+    description: |
+      Integration to obtain an ingressed address to access Foregjo from outside the model.
+      Note that you should use subdomain mode in traefik with a custom domain name.
+
+provides:
+  metrics-endpoint:
+    interface: prometheus_scrape
+    optional: true
+  grafana-dashboard:
+    interface: grafana_dashboard
+    optional: true
+
+charm-libs:
+  - lib: data_platform_libs.data_interfaces
+    version: "0"
+  - lib: grafana_k8s.grafana_dashboard
+    version: "0"
+  - lib: loki_k8s.loki_push_api
+    version: "1"
+  - lib: observability_libs.juju_topology
+    version: "0"
+  - lib: prometheus_k8s.prometheus_scrape
+    version: "0"
+  - lib: traefik_k8s.ingress_per_unit
+    version: "1"
+
+containers:
+  forgejo:
+    resource: forgejo-image
+    mounts:
+      - storage: data
+        location: /data
+
+storage:
+  data:
+    type: filesystem
+
+resources:
+  forgejo-image:
+    type: oci-image
+    description: OCI image for the Forgejo container
+    upstream-source: codeberg.org/forgejo/forgejo:11.0.3
+
+parts:
+  charm:
+    plugin: charm
+    source: .
+
+config:
+  options:
+    log-level:
+      description: |
+        Configures the log level of Forgejo.
+
+        Acceptable values are one of trace, debug, info, warn, error, or fatal.
+      default: "info"
+      type: string
+    domain:
+      description: |
+        Domain name to use as root url for Forgejo.
+
+        The url from the relation to traefik takes precendence over this config.
+      default: "forgejo.internal"
+      type: string
+
+assumes:
+  - juju >= 3.5
+  - k8s-api
