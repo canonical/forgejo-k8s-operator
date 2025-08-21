@@ -23,7 +23,7 @@ Example:
 ```sh
 juju deploy forgejo-k8s
 juju deploy postgresql-k8s --channel=14/stable
-juju deploy traefik-k8s --config routing_mode=subdomain
+juju deploy traefik-k8s --config external_hostname=forgejo.internal --config routing_mode=subdomain
 
 juju integrate forgejo-k8s postgresql-k8s
 juju integrate forgejo-k8s traefik-k8s
