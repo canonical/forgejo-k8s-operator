@@ -61,6 +61,7 @@ containers:
 
 storage:
   data:
+    minimum-size: 10G
     type: filesystem
 
 resources:

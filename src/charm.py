@@ -29,6 +29,12 @@ SERVICE_NAME = "forgejo"  # Name of Pebble service that runs in the workload con
 FORGEJO_CLI = "/usr/local/bin/forgejo"
 CUSTOM_FORGEJO_CONFIG = "/etc/forgejo.ini"
 PORT = 3000
+FORGEJO_DATA_DIR = "/data"
+FORGEJO_SYSTEM_USER_ID = 1000
+FORGEJO_SYSTEM_USER = "git"
+FORGEJO_SYSTEM_GROUP_ID = 1000
+FORGEJO_SYSTEM_GROUP = "git"
+
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class ForgejoConfig:
@@ -42,7 +48,7 @@ class ForgejoConfig:
         if self.log_level not in ['trace', 'debug', 'info', 'warn', 'error', 'fatal']:
             raise ValueError('Invalid log level number, should be one of trace, debug, info, warn, error, or fatal')
 
-class CharmForgejoCharm(ops.CharmBase):
+class ForgejoK8SOperatorCharm(ops.CharmBase):
     """Forgejo K8s Charm."""
 
     def __init__(self, framework: ops.Framework) -> None:
@@ -75,6 +81,7 @@ class CharmForgejoCharm(ops.CharmBase):
         framework.observe(self.on.forgejo_pebble_ready, self._on_pebble_ready)
         framework.observe(self.on.config_changed, self._on_config_changed)
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
+        framework.observe(getattr(self.on, "data_storage_attached"), self._on_storage_attached)
 
         # database support
         self.database = DatabaseRequires(self, relation_name='database', database_name='forgejo')
@@ -154,9 +161,9 @@ class CharmForgejoCharm(ops.CharmBase):
                     'summary': 'Forgejo service',
                     'command': ' '.join(command),
                     'startup': 'enabled',
-                    'user-id': 1000,
-                    'group-id': 1000,
-                    "working-dir": "/data",
+                    'user-id': FORGEJO_SYSTEM_USER_ID,
+                    'group-id': FORGEJO_SYSTEM_GROUP_ID,
+                    "working-dir": FORGEJO_DATA_DIR,
                 }
             },
         }
@@ -193,9 +200,9 @@ class CharmForgejoCharm(ops.CharmBase):
             self.container.push(
                 CUSTOM_FORGEJO_CONFIG,
                 buf.getvalue(),
-                user_id=1000,
-                user='git',
-                group_id=1000
+                user_id=FORGEJO_SYSTEM_USER_ID,
+                user=FORGEJO_SYSTEM_USER,
+                group_id=FORGEJO_SYSTEM_GROUP_ID
             )
 
             self.container.add_layer('forgejo', self._get_pebble_layer(), combine=True)
@@ -283,6 +290,9 @@ class CharmForgejoCharm(ops.CharmBase):
             logger.error('%s, could not parse domain from url %s', e, traefik_url)
         return domain
 
+    def _on_storage_attached(self, _: ops.StorageAttachedEvent) -> None:
+        self.container.exec(["chown", f"{FORGEJO_SYSTEM_USER}:{FORGEJO_SYSTEM_GROUP}", FORGEJO_DATA_DIR])
+
 
 if __name__ == "__main__":  # pragma: nocover
-    ops.main(CharmForgejoCharm)
+    ops.main(ForgejoK8SOperatorCharm)
