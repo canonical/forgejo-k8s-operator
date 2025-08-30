@@ -16,10 +16,10 @@ from charms.data_platform_libs.v0.data_interfaces import DatabaseCreatedEvent, D
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from charms.traefik_k8s.v1.ingress_per_unit import (
-    IngressPerUnitReadyForUnitEvent,
-    IngressPerUnitRequirer,
-    IngressPerUnitRevokedForUnitEvent,
+from charms.traefik_k8s.v2.ingress import (
+    IngressPerAppReadyEvent,
+    IngressPerAppRequirer,
+    IngressPerAppRevokedEvent,
 )
 from forgejo_handler import generate_config
 
@@ -41,7 +41,7 @@ class ForgejoConfig:
     """Configuration for the Forgejo k8s charm."""
 
     log_level: str = "info"
-    domain: str = "forgejo.internal"
+    domain: str = ""
 
     def __post_init__(self):
         """Configuration calidation."""
@@ -56,14 +56,14 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         self._port = PORT
         self.set_ports()
 
-        # traefik ingress support
-        self.ingress = IngressPerUnitRequirer(
+        # ingress support
+        self.ingress = IngressPerAppRequirer(
             self,
             relation_name="ingress",
-            port=self._port,
+            port=PORT,
             strip_prefix=True,
             redirect_https=True,
-            scheme=lambda: "http",
+            host=self.app.name,
         )
 
         # observability endpoint support
@@ -84,13 +84,14 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         framework.observe(getattr(self.on, "data_storage_attached"), self._on_storage_attached)
 
         # database support
+        # TODO: consider database_name = self.app.name ?
         self.database = DatabaseRequires(self, relation_name='database', database_name='forgejo')
         framework.observe(self.database.on.database_created, self._on_database_created)
         framework.observe(self.database.on.endpoints_changed, self._on_database_created)
 
         # ingress events
-        self.framework.observe(self.ingress.on.ready_for_unit, self._on_ingress_ready)
-        self.framework.observe(self.ingress.on.revoked_for_unit, self._on_ingress_revoked)
+        self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
+        self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
 
         self._name = "forgejo"
         self.container = self.unit.get_container(self._name)
@@ -109,17 +110,17 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             # We need the Forgejo <-> Postgresql relation to finish integrating.
             event.add_status(ops.WaitingStatus('Waiting for database relation'))
         if not self.ingress.url:
-            # We need the Forgejo <-> Traefik relation to finish integrating.
-            event.add_status(ops.WaitingStatus('Waiting for traefik relation'))
+            # We need the Forgejo <-> Ingress relation to finish integrating.
+            event.add_status(ops.WaitingStatus('Waiting for ingress relation'))
         try:
             status = self.container.get_service(self.pebble_service_name)
         except (ops.pebble.APIError, ops.pebble.ConnectionError, ops.ModelError):
             event.add_status(ops.MaintenanceStatus('Waiting for Pebble in workload container'))
         else:
             if not status.is_running():
-                event.add_status(ops.MaintenanceStatus('Waiting for the service to start up'))
+                event.add_status(ops.MaintenanceStatus('Waiting for Forgejo to start up'))
         # If nothing is wrong, then the status is active.
-        event.add_status(ops.ActiveStatus())
+        event.add_status(ops.ActiveStatus(self.serving_message()))
 
     @property
     def _forgejo_version(self) -> Optional[str]:
@@ -180,20 +181,18 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
         try:
             db_data = self.fetch_postgres_relation_data()
-            # url from traefik relation takes precendence over charm config
-            traefik_domain = self.fetch_traefik_relation_data()
-            if traefik_domain:
-                use_port_in_domain = False
-                final_domain = traefik_domain
-            else:
-                use_port_in_domain = True
-                final_domain = config.domain
+            ingress_url_domain = self.fetch_ingress_relation_data()
+
+            # TODO: this does not work right now
+            if ingress_url_domain != config.domain:
+                self.ingress.provide_ingress_requirements(host=config.domain, port=PORT)
+                
             # write the config file to the forgejo container's filesystem
             cfg = generate_config(
-                domain=final_domain,
+                domain=ingress_url_domain if ingress_url_domain else "",
                 log_level=config.log_level,
                 database_info=db_data,
-                use_port_in_domain=use_port_in_domain,
+                use_port_in_domain=False,
             )
             buf = StringIO()
             cfg.write(buf)
@@ -267,31 +266,35 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             return db_data
         return {}
 
-    def _on_ingress_ready(self, event: IngressPerUnitReadyForUnitEvent):
+    def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
         logger.info("Ingress for unit ready on '%s'", event.url)
         self._update_layer_and_restart()
 
-    def _on_ingress_revoked(self, event: IngressPerUnitRevokedForUnitEvent):
+    def _on_ingress_revoked(self, _: IngressPerAppRevokedEvent):
         logger.info("Ingress for unit revoked.")
         self._update_layer_and_restart()
 
-    def fetch_traefik_relation_data(self) -> str | None:
-        """Fetch traefik relation data.
+    def fetch_ingress_relation_data(self) -> str | None:
+        """Fetch ingress relation data.
 
-        We need to get the url that traefik will use and set Forgejo's ROOT url to that, this will override and ignore
+        We need to get the url that ingress will use and set Forgejo's ROOT url to that, this will override and ignore
         the domain set in the charm config.
         """
         domain = None
-        traefik_url = self.ingress.url
-        logger.debug('Got following url from ingress data: %s', traefik_url)
+        ingress_url = self.ingress.url
+        logger.debug('Got following url from ingress data: %s', ingress_url)
         try:
-            domain = urlparse(traefik_url).netloc
+            domain = urlparse(ingress_url).netloc
         except Exception as e:
-            logger.error('%s, could not parse domain from url %s', e, traefik_url)
+            logger.error('%s, could not parse domain from url %s', e, ingress_url)
         return domain
 
     def _on_storage_attached(self, _: ops.StorageAttachedEvent) -> None:
         self.container.exec(["chown", f"{FORGEJO_SYSTEM_USER}:{FORGEJO_SYSTEM_GROUP}", FORGEJO_DATA_DIR])
+
+    def serving_message(self) -> str:
+        return f"Serving at {self.ingress.url}" if self.ingress.url else ""
+
 
 
 if __name__ == "__main__":  # pragma: nocover

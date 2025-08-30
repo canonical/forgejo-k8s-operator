@@ -23,7 +23,7 @@ requires:
     description: |
       Integration to push logs for loki typically through grafana-agent.
   ingress:
-    interface: ingress_per_unit
+    interface: ingress
     optional: true
     limit: 1
     description: |
@@ -49,8 +49,8 @@ charm-libs:
     version: "0"
   - lib: prometheus_k8s.prometheus_scrape
     version: "0"
-  - lib: traefik_k8s.ingress_per_unit
-    version: "1"
+  - lib: traefik_k8s.ingress
+    version: "2"
 
 containers:
   forgejo:
@@ -88,8 +88,8 @@ config:
       description: |
         Domain name to use as root url for Forgejo.
 
-        The url from the relation to traefik takes precendence over this config.
-      default: "forgejo.internal"
+        If not specified, the juju aaplication name is used. Note that when related to an ingress app like traefik,
+        tine final url has both domains, like <forgejo-charm-config-domain>.<ingress-domain>
       type: string
 
 assumes:
