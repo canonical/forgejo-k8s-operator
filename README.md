@@ -18,7 +18,7 @@ Charmed k8s operator for forgejo.
 * Postgresql (or pgbouncer) for the database backend
 * Traefik for ingress
 
-Example:
+Example deloyment to a juju model called `staging`:
 
 ```sh
 juju deploy forgejo-k8s
@@ -31,7 +31,7 @@ juju integrate forgejo-k8s traefik-k8s
 
 ```console
 Unit               Workload  Agent  Address      Ports  Message
-forgejo-k8s/0*     active    idle   10.1.131.36
+forgejo-k8s/0*     active    idle   10.1.131.36         Serving at http://staging-forgejo-k8s.my.internal/
 postgresql-k8s/0*  active    idle   10.1.131.7          Primary
 traefik-k8s/0*     active    idle   10.1.131.37         Serving at my.internal
 ````
