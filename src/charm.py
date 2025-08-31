@@ -44,7 +44,7 @@ class ForgejoConfig:
     domain: str = ""
 
     def __post_init__(self):
-        """Configuration calidation."""
+        """Configuration validation."""
         if self.log_level not in ['trace', 'debug', 'info', 'warn', 'error', 'fatal']:
             raise ValueError('Invalid log level number, should be one of trace, debug, info, warn, error, or fatal')
 
@@ -84,8 +84,11 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         framework.observe(getattr(self.on, "data_storage_attached"), self._on_storage_attached)
 
         # database support
-        # TODO: consider database_name = self.app.name ?
-        self.database = DatabaseRequires(self, relation_name='database', database_name='forgejo')
+        self.database = DatabaseRequires(
+            self,
+            relation_name='database',
+            database_name=f"{self.model.name}-{self.app.name}",
+        )
         framework.observe(self.database.on.database_created, self._on_database_created)
         framework.observe(self.database.on.endpoints_changed, self._on_database_created)
 
@@ -120,7 +123,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             if not status.is_running():
                 event.add_status(ops.MaintenanceStatus('Waiting for Forgejo to start up'))
         # If nothing is wrong, then the status is active.
-        event.add_status(ops.ActiveStatus(self.serving_message()))
+        event.add_status(ops.ActiveStatus(self.serving_message))
 
     @property
     def _forgejo_version(self) -> Optional[str]:
@@ -152,7 +155,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
     def _get_pebble_layer(self) -> ops.pebble.Layer:
         """A Pebble layer for the Forgejo service."""
-        command = [FORGEJO_CLI, 'web', f'--config={CUSTOM_FORGEJO_CONFIG}'] 
         pebble_layer: ops.pebble.LayerDict = {
             'summary': 'Forgejo service',
             'description': 'pebble config layer for the Forgejo server',
@@ -160,7 +162,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 self.pebble_service_name: {
                     'override': 'replace',
                     'summary': 'Forgejo service',
-                    'command': ' '.join(command),
+                    'command': f"{FORGEJO_CLI} web --config={CUSTOM_FORGEJO_CONFIG}",
                     'startup': 'enabled',
                     'user-id': FORGEJO_SYSTEM_USER_ID,
                     'group-id': FORGEJO_SYSTEM_GROUP_ID,
@@ -277,8 +279,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
     def fetch_ingress_relation_data(self) -> str | None:
         """Fetch ingress relation data.
 
-        We need to get the url that ingress will use and set Forgejo's ROOT url to that, this will override and ignore
-        the domain set in the charm config.
+        We need to get the url that ingress will use and set Forgejo's ROOT url to this.
         """
         domain = None
         ingress_url = self.ingress.url
@@ -292,6 +293,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
     def _on_storage_attached(self, _: ops.StorageAttachedEvent) -> None:
         self.container.exec(["chown", f"{FORGEJO_SYSTEM_USER}:{FORGEJO_SYSTEM_GROUP}", FORGEJO_DATA_DIR])
 
+    @property
     def serving_message(self) -> str:
         return f"Serving at {self.ingress.url}" if self.ingress.url else ""
 
