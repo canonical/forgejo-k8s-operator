@@ -46,8 +46,8 @@ Waiting for task 12...
   "traefik-k8s": {
     "url": "http://my.internal"
   },
-  "forgejo-k8s/0": {
-    "url": "http://staging-forgejo-k8s-0.my.internal/"
+  "forgejo-k8s": {
+    "url": "http://staging-forgejo-k8s.my.internal/"
   }
 }
 ```
