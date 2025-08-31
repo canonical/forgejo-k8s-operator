@@ -9,7 +9,6 @@ The intention is that this module could be used outside the context of a charm.
 import configparser
 import logging
 import secrets
-from typing import Dict
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,7 @@ def generate_config(
         app_slogan: str = "Beyond coding. We Forge.",
         domain: str = "localhost",
         http_port: int = 3000,
-        database_info: Dict[str, str] = {},
+        database_info: dict[str, str] = {},
         log_level: str = "info",
         use_port_in_domain: bool = True,
     ) -> configparser.ConfigParser:
@@ -54,6 +53,7 @@ def generate_config(
         "DISABLE_SSH": "false",
         "SSH_PORT": "22",
         "LFS_START_SERVER": "true",
+        # TODO: Perhaps manage this with juju secrets so its not recreated frequently?
         "LFS_JWT_SECRET": f"`{random_token()}`",
         "OFFLINE_MODE": "true",
     }
@@ -108,11 +108,13 @@ def generate_config(
 
     config["security"] = {
         "INSTALL_LOCK": "true",
+        # TODO: Perhaps manage this with juju secrets so its not recreated frequently?
         "INTERNAL_TOKEN": f"`{random_token(length=104)}`",
         "PASSWORD_HASH_ALGO": "pbkdf2_hi"
     }
 
     config["oauth2"] = {
+        # TODO: Perhaps manage this with juju secrets so its not recreated frequently?
         "JWT_SECRET": f"`{random_token()}`",
     }
 
