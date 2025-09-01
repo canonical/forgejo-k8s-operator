@@ -186,7 +186,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             ingress_url_domain = self.fetch_ingress_relation_data()
 
             # TODO: this does not work right now
-            if ingress_url_domain != config.domain:
+            if ingress_url_domain != config.domain and config.domain:
                 self.ingress.provide_ingress_requirements(host=config.domain, port=PORT)
                 
             # write the config file to the forgejo container's filesystem
