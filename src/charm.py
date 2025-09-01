@@ -68,11 +68,11 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         #     host=self.app.name,
         # )
 
-        self.traefik_route = TraefikRouteRequirer(
+        self.ingress = TraefikRouteRequirer(
             charm, self.model.get_relation("ingress"), "ingress", raw=True
         )
         # we may submit a route later on to traefik if the domain charm config is set 
-        self.traefik_route.submit_to_traefik(
+        self.ingress.submit_to_traefik(
             self.get_traefik_route_configuration(self.app.name)
         )
 
@@ -132,7 +132,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         elif not self.database.fetch_relation_data():
             # We need the Forgejo <-> Postgresql relation to finish integrating.
             event.add_status(ops.WaitingStatus('Waiting for database relation'))
-        if not self.ingress.url:
+        if not self.ingress.external_host:
             # We need the Forgejo <-> Ingress relation to finish integrating.
             event.add_status(ops.WaitingStatus('Waiting for ingress relation'))
         try:
@@ -201,7 +201,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 logger.info(
                     f"Config domain {config.domain} is valid and different from ingress {ingress_url_domain}, submitting traefik route"
                 )
-                self.traefik_route.submit_to_traefik(
+                self.ingress.submit_to_traefik(
                     self.get_traefik_route_configuration(config.domain)
                 )
                 
@@ -326,6 +326,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         # except Exception as e:
         #     logger.error('%s, could not parse domain from url %s', e, ingress_url)
         # return domain
+        logger.info(f"Ingress object has domain {self.ingress.external_host}")
         traefik_route_relation = self.model.get_relation("ingress")
         if traefik_route_relation:
             return traefik_route_relation.data[traefik_route_relation.app].get("external_host")
