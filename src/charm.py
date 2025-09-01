@@ -59,18 +59,19 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         self.set_ports()
 
         # ingress support
-        self.ingress = IngressPerAppRequirer(
-            self,
-            relation_name="ingress",
-            port=PORT,
-            strip_prefix=True,
-            redirect_https=True,
-            host=self.app.name,
-        )
+        # self.ingress = IngressPerAppRequirer(
+        #     self,
+        #     relation_name="ingress",
+        #     port=PORT,
+        #     strip_prefix=True,
+        #     redirect_https=True,
+        #     host=self.app.name,
+        # )
 
         self.traefik_route = TraefikRouteRequirer(
             charm, self.model.get_relation("ingress"), "ingress", raw=True
         )
+        # we may submit a route later on to traefik if the domain charm config is set 
         self.traefik_route.submit_to_traefik(
             self.get_traefik_route_configuration(self.app.name)
         )
