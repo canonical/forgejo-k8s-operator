@@ -49,6 +49,8 @@ charm-libs:
     version: "0"
   - lib: prometheus_k8s.prometheus_scrape
     version: "0"
+  - lib: traefik_k8s.traefik_route
+    version: "0"
   - lib: traefik_k8s.ingress
     version: "2"
 

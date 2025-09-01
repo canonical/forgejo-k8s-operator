@@ -9,6 +9,7 @@ from io import StringIO
 import logging
 import ops
 import re
+import socket
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -16,6 +17,7 @@ from charms.data_platform_libs.v0.data_interfaces import DatabaseCreatedEvent, D
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 from charms.traefik_k8s.v2.ingress import (
     IngressPerAppReadyEvent,
     IngressPerAppRequirer,
@@ -78,8 +80,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             self, relation_name='grafana-dashboard'
         )
 
-        framework.observe(self.on.forgejo_pebble_ready, self._on_pebble_ready)
-        framework.observe(self.on.config_changed, self._on_config_changed)
+        framework.observe(self.on.forgejo_pebble_ready, self.reconcile)
+        framework.observe(self.on.config_changed, self.reconcile)
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
         framework.observe(getattr(self.on, "data_storage_attached"), self._on_storage_attached)
 
@@ -89,20 +91,22 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             relation_name='database',
             database_name=self.database_name,
         )
-        framework.observe(self.database.on.database_created, self._on_database_created)
-        framework.observe(self.database.on.endpoints_changed, self._on_database_created)
+        framework.observe(self.database.on.database_created, self.reconcile)
+        framework.observe(self.database.on.endpoints_changed, self.reconcile)
 
         # ingress events
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
-        self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
+        self.framework.observe(self.ingress.on.revoked, self.reconcile)
 
         self._name = "forgejo"
         self.container = self.unit.get_container(self._name)
         self.pebble_service_name = SERVICE_NAME
 
+
     @property
     def database_name(self):
         return f"{self.model.name}-{self.app.name}"
+
 
     def _on_collect_status(self, event: ops.CollectStatusEvent) -> None:
         try:
@@ -128,6 +132,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         # If nothing is wrong, then the status is active.
         event.add_status(ops.ActiveStatus(self.serving_message))
 
+
     @property
     def _forgejo_version(self) -> Optional[str]:
         """Returns the version of Forgejo.
@@ -145,16 +150,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             return result
         return result.group(1)
 
-    def _on_pebble_ready(self, _: ops.PebbleReadyEvent) -> None:
-        """Handle pebble-ready event."""
-        self._update_layer_and_restart()
-
-    def _on_config_changed(self, _: ops.ConfigChangedEvent) -> None:
-        self._update_layer_and_restart()
-
-    def _on_database_created(self, _: DatabaseCreatedEvent) -> None:
-        """Event is fired when postgres database is created."""
-        self._update_layer_and_restart()
 
     def _get_pebble_layer(self) -> ops.pebble.Layer:
         """A Pebble layer for the Forgejo service."""
@@ -175,7 +170,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         }
         return ops.pebble.Layer(pebble_layer)
 
-    def _update_layer_and_restart(self) -> None:
+
+    def reconcile(self, _: ops.HookEvent) -> None:
         self.unit.status = ops.MaintenanceStatus("starting workload")
         try:
             config = self.load_config(ForgejoConfig)
@@ -187,10 +183,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         try:
             db_data = self.fetch_postgres_relation_data()
             ingress_url_domain = self.fetch_ingress_relation_data()
-
-            # TODO: this does not work right now
-            if ingress_url_domain != config.domain and config.domain:
-                self.ingress.provide_ingress_requirements(host=config.domain, port=PORT)
                 
             # write the config file to the forgejo container's filesystem
             cfg = generate_config(
@@ -221,8 +213,10 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 self.unit.set_workload_version(version)
             else:
                 logger.debug("Cannot set workload version at this time: could not get Forgejo version.")
+        # @TODO: Extend exception handling
         except (ops.pebble.APIError, ops.pebble.ConnectionError) as e:
             logger.info('Unable to connect to Pebble: %s', e)
+
 
     def set_ports(self):
         """Open necessary (and close no longer needed) workload ports."""
@@ -239,6 +233,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         new_ports_to_open = planned_ports.difference(actual_ports)
         for p in new_ports_to_open:
             self.unit.open_port(p.protocol, p.port)
+
 
     def fetch_postgres_relation_data(self) -> dict[str, str]:
         """Fetch postgres relation data.
@@ -271,13 +266,36 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             return db_data
         return {}
 
+
     def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
         logger.info("Ingress for unit ready on '%s'", event.url)
-        self._update_layer_and_restart()
+        self.reconcile()
 
-    def _on_ingress_revoked(self, _: IngressPerAppRevokedEvent):
-        logger.info("Ingress for unit revoked.")
-        self._update_layer_and_restart()
+
+    def configure_traefik_route(self, domain: str, port: str) -> dict:
+        """Configure a route from traefik to forgejo.
+
+        WIP
+        """
+        return {
+            "http": {
+                "routers": {
+                    "forgejo-router": {
+                        "rule": f"Host(`{domain}`)", # "ClientIP(`0.0.0.0/0`)"
+                        "service": "forgejo-service",
+                    }
+                }
+                "services": {
+                    "forgejo-service": {
+                        "loadBalancer": {
+                            "servers": [f"http://{socket.getfqdn()}:{port}"],
+                            "terminationDelay": -1,
+                        }
+                    }
+                }
+            }
+        }
+
 
     def fetch_ingress_relation_data(self) -> str | None:
         """Fetch ingress relation data.
@@ -293,8 +311,10 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             logger.error('%s, could not parse domain from url %s', e, ingress_url)
         return domain
 
+
     def _on_storage_attached(self, _: ops.StorageAttachedEvent) -> None:
         self.container.exec(["chown", f"{FORGEJO_SYSTEM_USER}:{FORGEJO_SYSTEM_GROUP}", FORGEJO_DATA_DIR])
+
 
     @property
     def serving_message(self) -> str:
