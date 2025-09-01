@@ -87,7 +87,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         self.database = DatabaseRequires(
             self,
             relation_name='database',
-            database_name=f"{self.model.name}-{self.app.name}",
+            database_name=self.database_name,
         )
         framework.observe(self.database.on.database_created, self._on_database_created)
         framework.observe(self.database.on.endpoints_changed, self._on_database_created)
@@ -100,6 +100,9 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         self.container = self.unit.get_container(self._name)
         self.pebble_service_name = SERVICE_NAME
 
+    @property
+    def database_name(self):
+        return f"{self.model.name}-{self.app.name}"
 
     def _on_collect_status(self, event: ops.CollectStatusEvent) -> None:
         try:
@@ -258,7 +261,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 "DB_TYPE": "postgres",
                 'HOST': host,
                 'PORT': port,
-                'NAME': "forgejo", 
+                'NAME': self.database_name,
                 'USER': data['username'],
                 'PASSWD': data['password'],
                 "SCHEMA": "",
