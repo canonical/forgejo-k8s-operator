@@ -23,7 +23,8 @@ requires:
     description: |
       Integration to push logs for loki typically through grafana-agent.
   ingress:
-    interface: ingress
+    # interface: ingress
+    interface: traefik_route
     optional: true
     limit: 1
     description: |

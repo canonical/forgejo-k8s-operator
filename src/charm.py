@@ -68,6 +68,13 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             host=self.app.name,
         )
 
+        self.traefik_route = TraefikRouteRequirer(
+            charm, self.model.get_relation("ingress"), "ingress", raw=True
+        )
+        self.traefik_route.submit_to_traefik(
+            self.get_traefik_route_configuration(self.app.name)
+        )
+
         # observability endpoint support
         self._prometheus_scraping = MetricsEndpointProvider(
             self,
@@ -106,6 +113,11 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
     @property
     def database_name(self):
         return f"{self.model.name}-{self.app.name}"
+
+
+    @property
+    def hostname(self) -> str:
+        return socket.getfqdn()
 
 
     def _on_collect_status(self, event: ops.CollectStatusEvent) -> None:
@@ -183,10 +195,18 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         try:
             db_data = self.fetch_postgres_relation_data()
             ingress_url_domain = self.fetch_ingress_relation_data()
+
+            if config.domain and config.domain != ingress_url_domain:
+                logger.info(
+                    f"Config domain {config.domain} is valid and different from ingress {ingress_url_domain}, submitting traefik route"
+                )
+                self.traefik_route.submit_to_traefik(
+                    self.get_traefik_route_configuration(config.domain)
+                )
                 
             # write the config file to the forgejo container's filesystem
             cfg = generate_config(
-                domain=ingress_url_domain if ingress_url_domain else "",
+                domain=config.domain if config.domain else self.hostname,
                 log_level=config.log_level,
                 database_info=db_data,
                 use_port_in_domain=False,
@@ -272,7 +292,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         self.reconcile()
 
 
-    def configure_traefik_route(self, domain: str, port: str) -> dict:
+    def get_traefik_route_configuration(self, domain: str) -> dict:
         """Configure a route from traefik to forgejo.
 
         WIP
@@ -288,7 +308,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 "services": {
                     "forgejo-service": {
                         "loadBalancer": {
-                            "servers": [f"http://{socket.getfqdn()}:{port}"],
+                            "servers": [f"http://{self.hostname}:{PORT}"],
                             "terminationDelay": -1,
                         }
                     }
@@ -302,14 +322,17 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
         We need to get the url that ingress will use and set Forgejo's ROOT url to this.
         """
-        domain = None
-        ingress_url = self.ingress.url
-        logger.debug('Got following url from ingress data: %s', ingress_url)
-        try:
-            domain = urlparse(ingress_url).netloc
-        except Exception as e:
-            logger.error('%s, could not parse domain from url %s', e, ingress_url)
-        return domain
+        # domain = None
+        # ingress_url = self.ingress.url
+        # logger.debug('Got following url from ingress data: %s', ingress_url)
+        # try:
+        #     domain = urlparse(ingress_url).netloc
+        # except Exception as e:
+        #     logger.error('%s, could not parse domain from url %s', e, ingress_url)
+        # return domain
+        traefik_route_relation = self.model.get_relation("ingress")
+        if traefik_route_relation:
+            return traefik_route_relation.data[traefik_route_relation.app].get("external_host")
 
 
     def _on_storage_attached(self, _: ops.StorageAttachedEvent) -> None:
