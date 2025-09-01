@@ -103,7 +103,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         framework.observe(self.database.on.endpoints_changed, self.reconcile)
 
         # ingress events
-        self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
+        self.framework.observe(self.ingress.on.ready, self.reconcile)
         self.framework.observe(self.ingress.on.revoked, self.reconcile)
 
         self._name = "forgejo"
@@ -288,11 +288,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         return {}
 
 
-    def _on_ingress_ready(self, event: IngressPerAppReadyEvent):
-        logger.info("Ingress for unit ready on '%s'", event.url)
-        self.reconcile()
-
-
     def get_traefik_route_configuration(self, domain: str) -> dict:
         """Configure a route from traefik to forgejo.
 
@@ -301,13 +296,13 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         return {
             "http": {
                 "routers": {
-                    "forgejo-router": {
+                    f"{self.model.name}-{self.model.app.name}-router": {
                         "rule": f"Host(`{domain}`)", # "ClientIP(`0.0.0.0/0`)"
-                        "service": "forgejo-service",
+                        "service": self.traefik_service_name,
                     }
                 }
                 "services": {
-                    "forgejo-service": {
+                    self.traefik_service_name: {
                         "loadBalancer": {
                             "servers": [f"http://{self.hostname}:{PORT}"],
                             "terminationDelay": -1,
@@ -341,8 +336,16 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
 
     @property
+    def traefik_service_name(self):
+        return f"{self.model.name}-{self.model.app.name}-service"
+
+
+    @property
     def serving_message(self) -> str:
-        return f"Serving at {self.ingress.url}" if self.ingress.url else ""
+        if domain := self.fetch_ingress_relation_data:
+            return f"Serving at {domain}"
+        else
+            return ""
 
 
 
