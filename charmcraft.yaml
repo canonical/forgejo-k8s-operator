@@ -52,8 +52,7 @@ charm-libs:
     version: "0"
   - lib: traefik_k8s.traefik_route
     version: "0"
-  - lib: traefik_k8s.ingress
-    version: "2"
+
 
 containers:
   forgejo:

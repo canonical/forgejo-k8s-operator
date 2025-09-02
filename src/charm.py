@@ -11,18 +11,13 @@ import ops
 import re
 import socket
 from typing import Optional
-from urllib.parse import urlparse
 
-from charms.data_platform_libs.v0.data_interfaces import DatabaseCreatedEvent, DatabaseRequires
+from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
-from charms.traefik_k8s.v2.ingress import (
-    IngressPerAppReadyEvent,
-    IngressPerAppRequirer,
-    IngressPerAppRevokedEvent,
-)
+
 from forgejo_handler import generate_config
 
 logger = logging.getLogger(__name__)
@@ -58,16 +53,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         self._port = PORT
         self.set_ports()
 
-        # ingress support
-        # self.ingress = IngressPerAppRequirer(
-        #     self,
-        #     relation_name="ingress",
-        #     port=PORT,
-        #     strip_prefix=True,
-        #     redirect_https=True,
-        #     host=self.app.name,
-        # )
-
         self.ingress = TraefikRouteRequirer(
             self, self.model.get_relation("ingress"), "ingress", raw=True
         )
@@ -97,10 +82,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         )
         framework.observe(self.database.on.database_created, self.reconcile)
         framework.observe(self.database.on.endpoints_changed, self.reconcile)
-
-        # ingress events
-        # self.framework.observe(self.ingress.on.ready, self.reconcile)
-        # self.framework.observe(self.ingress.on.revoked, self.reconcile)
 
         self._name = "forgejo"
         self.container = self.unit.get_container(self._name)
@@ -198,7 +179,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
         try:
             db_data = self.fetch_postgres_relation_data()
-            # ingress_url_domain = self.fetch_ingress_relation_data()
 
             if self.ingress.is_ready():
                 if config.domain:
