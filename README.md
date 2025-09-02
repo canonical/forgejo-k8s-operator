@@ -18,12 +18,12 @@ Charmed k8s operator for forgejo.
 * Postgresql (or pgbouncer) for the database backend
 * Traefik for ingress
 
-Example deloyment to a juju model called `staging`:
+Example deloyment:
 
 ```sh
 juju deploy forgejo-k8s
 juju deploy postgresql-k8s --channel=14/stable --trust
-juju deploy traefik-k8s --config external_hostname=my.internal --config routing_mode=subdomain --trust
+juju deploy traefik-k8s --config external_hostname=internal --trust
 
 juju integrate forgejo-k8s postgresql-k8s
 juju integrate forgejo-k8s traefik-k8s
@@ -31,24 +31,14 @@ juju integrate forgejo-k8s traefik-k8s
 
 ```console
 Unit               Workload  Agent  Address      Ports  Message
-forgejo-k8s/0*     active    idle   10.1.131.36         Serving at http://staging-forgejo-k8s.my.internal/
+forgejo-k8s/0*     active    idle   10.1.131.36         Serving at forgejo.internal
 postgresql-k8s/0*  active    idle   10.1.131.7          Primary
-traefik-k8s/0*     active    idle   10.1.131.37         Serving at my.internal
+traefik-k8s/0*     active    idle   10.1.131.37         Serving at internal
 ````
 
 ```console
-# juju run traefik-k8s/0 show-proxied-endpoints | yq .proxied-endpoints | jq .
-Running operation 11 with 1 task
-  - task 12 on unit-traefik-k8s-0
-
-Waiting for task 12...
-{
-  "traefik-k8s": {
-    "url": "http://my.internal"
-  },
-  "forgejo-k8s": {
-    "url": "http://staging-forgejo-k8s.my.internal/"
-  }
-}
+# curl -I -H "Host: forgejo.internal" http://<EXTERNAL-TRAEFIK-LOADBALANCER-SERVICE-IP>/
+HTTP/1.1 200 OK
+Date: Tue, 02 Sep 2025 19:40:37 GMT
 ```
 
