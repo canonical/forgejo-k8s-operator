@@ -12,7 +12,7 @@ import secrets
 
 logger = logging.getLogger(__name__)
 
-def random_token(length: int = 44) -> str:
+def random_token(length: int = 43) -> str:
     return secrets.token_urlsafe(length)[:length]
 
 def generate_config(
@@ -109,7 +109,7 @@ def generate_config(
     config["security"] = {
         "INSTALL_LOCK": "true",
         # TODO: Perhaps manage this with juju secrets so its not recreated frequently?
-        "INTERNAL_TOKEN": f"`{random_token(length=104)}`",
+        "INTERNAL_TOKEN": f"`{random_token(length=105)}`",
         "PASSWORD_HASH_ALGO": "pbkdf2_hi"
     }
 

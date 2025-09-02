@@ -69,11 +69,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         # )
 
         self.ingress = TraefikRouteRequirer(
-            charm, self.model.get_relation("ingress"), "ingress", raw=True
-        )
-        # we may submit a route later on to traefik if the domain charm config is set 
-        self.ingress.submit_to_traefik(
-            self.get_traefik_route_configuration(self.app.name)
+            self, self.model.get_relation("ingress"), "ingress", raw=True
         )
 
         # observability endpoint support
@@ -103,8 +99,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         framework.observe(self.database.on.endpoints_changed, self.reconcile)
 
         # ingress events
-        self.framework.observe(self.ingress.on.ready, self.reconcile)
-        self.framework.observe(self.ingress.on.revoked, self.reconcile)
+        # self.framework.observe(self.ingress.on.ready, self.reconcile)
+        # self.framework.observe(self.ingress.on.revoked, self.reconcile)
 
         self._name = "forgejo"
         self.container = self.unit.get_container(self._name)
@@ -132,7 +128,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         elif not self.database.fetch_relation_data():
             # We need the Forgejo <-> Postgresql relation to finish integrating.
             event.add_status(ops.WaitingStatus('Waiting for database relation'))
-        if not self.ingress.external_host:
+        if not self.ingress.is_ready():
             # We need the Forgejo <-> Ingress relation to finish integrating.
             event.add_status(ops.WaitingStatus('Waiting for ingress relation'))
         try:
@@ -197,13 +193,19 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             db_data = self.fetch_postgres_relation_data()
             ingress_url_domain = self.fetch_ingress_relation_data()
 
-            if config.domain and config.domain != ingress_url_domain:
-                logger.info(
-                    f"Config domain {config.domain} is valid and different from ingress {ingress_url_domain}, submitting traefik route"
-                )
-                self.ingress.submit_to_traefik(
-                    self.get_traefik_route_configuration(config.domain)
-                )
+            if self.ingress.is_ready():
+                if config.domain and config.domain != ingress_url_domain:
+                    logger.info(
+                        f"Config domain {config.domain} is valid and different from ingress {ingress_url_domain}, submitting traefik route"
+                    )
+                    self.ingress.submit_to_traefik(
+                        self.get_traefik_route_configuration(config.domain)
+                    )
+                else:
+                    # if not ingress_url_domain:
+                    self.ingress.submit_to_traefik(
+                        self.get_traefik_route_configuration(self.app.name)
+                    )
                 
             # write the config file to the forgejo container's filesystem
             cfg = generate_config(
@@ -288,6 +290,11 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         return {}
 
 
+    @property
+    def traefik_service_name(self):
+        return f"{self.model.name}-{self.model.app.name}-service"
+
+
     def get_traefik_route_configuration(self, domain: str) -> dict:
         """Configure a route from traefik to forgejo.
 
@@ -296,16 +303,18 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         return {
             "http": {
                 "routers": {
-                    f"{self.model.name}-{self.model.app.name}-router": {
+                    f"{self.model.name}-{self.app.name}-router": {
                         "rule": f"Host(`{domain}`)", # "ClientIP(`0.0.0.0/0`)"
                         "service": self.traefik_service_name,
+                        "entryPoints": ["web"],
                     }
-                }
+                },
                 "services": {
                     self.traefik_service_name: {
                         "loadBalancer": {
-                            "servers": [f"http://{self.hostname}:{PORT}"],
-                            "terminationDelay": -1,
+                            "servers": [
+                                {"url": f"http://{self.app.name}.{self.model.name}.svc.cluster.local:{PORT}"}
+                            ]
                         }
                     }
                 }
@@ -337,15 +346,10 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
 
     @property
-    def traefik_service_name(self):
-        return f"{self.model.name}-{self.model.app.name}-service"
-
-
-    @property
     def serving_message(self) -> str:
-        if domain := self.fetch_ingress_relation_data:
+        if domain := self.fetch_ingress_relation_data():
             return f"Serving at {domain}"
-        else
+        else:
             return ""
 
 
