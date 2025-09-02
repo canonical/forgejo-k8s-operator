@@ -93,6 +93,7 @@ config:
 
         If not specified, the juju aaplication name is used. Note that when related to an ingress app like traefik,
         tine final url has both domains, like <forgejo-charm-config-domain>.<ingress-domain>
+      default: "forgejo.internal"
       type: string
 
 assumes:

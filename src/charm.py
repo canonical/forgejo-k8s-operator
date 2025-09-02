@@ -43,7 +43,7 @@ class ForgejoConfig:
     """Configuration for the Forgejo k8s charm."""
 
     log_level: str = "info"
-    domain: str = ""
+    domain: str = "forgejo.internal"
 
     def __post_init__(self):
         """Configuration validation."""
@@ -118,10 +118,14 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
 
     def _on_collect_status(self, event: ops.CollectStatusEvent) -> None:
+        config = None
         try:
-            self.load_config(ForgejoConfig)
+            config = self.load_config(ForgejoConfig)
         except ValueError as e:
             event.add_status(ops.BlockedStatus(str(e)))
+        if config:
+            if not config.domain:
+                event.add_status(ops.BlockedStatus('domain config needs to be set'))
         if not self.model.get_relation('database'):
             # We need the user to do 'juju integrate'.
             event.add_status(ops.BlockedStatus('Waiting for database relation'))
@@ -139,7 +143,10 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             if not status.is_running():
                 event.add_status(ops.MaintenanceStatus('Waiting for Forgejo to start up'))
         # If nothing is wrong, then the status is active.
-        event.add_status(ops.ActiveStatus(self.serving_message))
+        if config:
+            event.add_status(ops.ActiveStatus(f"Serving at {config.domain}"))
+        else:
+            event.add_status(ops.ActiveStatus())
 
 
     @property
@@ -191,25 +198,22 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
         try:
             db_data = self.fetch_postgres_relation_data()
-            ingress_url_domain = self.fetch_ingress_relation_data()
+            # ingress_url_domain = self.fetch_ingress_relation_data()
 
             if self.ingress.is_ready():
-                if config.domain and config.domain != ingress_url_domain:
+                if config.domain:
                     logger.info(
-                        f"Config domain {config.domain} is valid and different from ingress {ingress_url_domain}, submitting traefik route"
+                        f"Config domain {config.domain} is valid, submitting traefik route"
                     )
                     self.ingress.submit_to_traefik(
                         self.get_traefik_route_configuration(config.domain)
                     )
                 else:
-                    # if not ingress_url_domain:
-                    self.ingress.submit_to_traefik(
-                        self.get_traefik_route_configuration(self.app.name)
-                    )
-                
+                    logger.error(f"No domain set in charm")
+
             # write the config file to the forgejo container's filesystem
             cfg = generate_config(
-                domain=config.domain if config.domain else self.hostname,
+                domain=config.domain,
                 log_level=config.log_level,
                 database_info=db_data,
                 use_port_in_domain=False,
@@ -319,35 +323,9 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         }
 
 
-    def fetch_ingress_relation_data(self) -> str | None:
-        """Fetch ingress relation data.
-
-        We need to get the url that ingress will use and set Forgejo's ROOT url to this.
-        """
-        # domain = None
-        # ingress_url = self.ingress.url
-        # logger.debug('Got following url from ingress data: %s', ingress_url)
-        # try:
-        #     domain = urlparse(ingress_url).netloc
-        # except Exception as e:
-        #     logger.error('%s, could not parse domain from url %s', e, ingress_url)
-        # return domain
-        logger.info(f"Ingress object has domain {self.ingress.external_host}")
-        traefik_route_relation = self.model.get_relation("ingress")
-        if traefik_route_relation:
-            return traefik_route_relation.data[traefik_route_relation.app].get("external_host")
-
-
     def _on_storage_attached(self, _: ops.StorageAttachedEvent) -> None:
         self.container.exec(["chown", f"{FORGEJO_SYSTEM_USER}:{FORGEJO_SYSTEM_GROUP}", FORGEJO_DATA_DIR])
 
-
-    @property
-    def serving_message(self) -> str:
-        if domain := self.fetch_ingress_relation_data():
-            return f"Serving at {domain}"
-        else:
-            return ""
 
 
 
