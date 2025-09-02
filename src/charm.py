@@ -296,10 +296,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
 
     def get_traefik_route_configuration(self, domain: str) -> dict:
-        """Configure a route from traefik to forgejo.
-
-        WIP
-        """
+        """Configure a route from traefik to forgejo."""
         return {
             "http": {
                 "routers": {
