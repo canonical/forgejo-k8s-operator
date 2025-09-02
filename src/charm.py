@@ -11,6 +11,7 @@ import ops
 import re
 import socket
 from typing import Optional
+import secrets
 
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -24,7 +25,17 @@ logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "forgejo"  # Name of Pebble service that runs in the workload container.
 FORGEJO_CLI = "/usr/local/bin/forgejo"
-CUSTOM_FORGEJO_CONFIG = "/etc/forgejo.ini"
+CUSTOM_FORGEJO_CONFIG_DIR = "/etc/forgejo/"
+CUSTOM_FORGEJO_CONFIG_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "config.ini"
+CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "lfs_jwt_secret"
+CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "internal_token"
+CUSTOM_FORGEJO_JWT_SECRET_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "jwt_secret"
+# map secret file to the secret length
+CUSTOM_FORGEJO_SECRETS = {
+    CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE: 43,
+    CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE: 105,
+    CUSTOM_FORGEJO_JWT_SECRET_FILE: 43,
+}
 PORT = 3000
 FORGEJO_DATA_DIR = "/data"
 FORGEJO_SYSTEM_USER_ID = 1000
@@ -44,6 +55,7 @@ class ForgejoConfig:
         """Configuration validation."""
         if self.log_level not in ['trace', 'debug', 'info', 'warn', 'error', 'fatal']:
             raise ValueError('Invalid log level number, should be one of trace, debug, info, warn, error, or fatal')
+
 
 class ForgejoK8SOperatorCharm(ops.CharmBase):
     """Forgejo K8s Charm."""
@@ -157,7 +169,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 self.pebble_service_name: {
                     'override': 'replace',
                     'summary': 'Forgejo service',
-                    'command': f"{FORGEJO_CLI} web --config={CUSTOM_FORGEJO_CONFIG}",
+                    'command': f"{FORGEJO_CLI} web --config={CUSTOM_FORGEJO_CONFIG_FILE}",
                     'startup': 'enabled',
                     'user-id': FORGEJO_SYSTEM_USER_ID,
                     'group-id': FORGEJO_SYSTEM_GROUP_ID,
@@ -193,6 +205,9 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
             # write the config file to the forgejo container's filesystem
             cfg = generate_config(
+                CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE,
+                CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE,
+                CUSTOM_FORGEJO_JWT_SECRET_FILE,
                 domain=config.domain,
                 log_level=config.log_level,
                 database_info=db_data,
@@ -201,12 +216,22 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             buf = StringIO()
             cfg.write(buf)
             self.container.push(
-                CUSTOM_FORGEJO_CONFIG,
+                CUSTOM_FORGEJO_CONFIG_FILE,
                 buf.getvalue(),
+                make_dirs=True,
                 user_id=FORGEJO_SYSTEM_USER_ID,
                 user=FORGEJO_SYSTEM_USER,
                 group_id=FORGEJO_SYSTEM_GROUP_ID
             )
+            for secret_file, length in CUSTOM_FORGEJO_SECRETS.items():
+                if not self.container.exists(secret_file):
+                    self.container.push(
+                        secret_file,
+                        secrets.token_urlsafe(length)[:length],
+                        user_id=FORGEJO_SYSTEM_USER_ID,
+                        user=FORGEJO_SYSTEM_USER,
+                        group_id=FORGEJO_SYSTEM_GROUP_ID
+                    )
 
             self.container.add_layer('forgejo', self._get_pebble_layer(), combine=True)
             logger.info("Added updated layer 'forgejo' to Pebble plan")

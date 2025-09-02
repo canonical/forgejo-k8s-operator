@@ -16,6 +16,9 @@ def random_token(length: int = 43) -> str:
     return secrets.token_urlsafe(length)[:length]
 
 def generate_config(
+        lfs_jwt_secret: str,
+        internal_token: str,
+        jwt_secret: str,
         app_name: str = "Forgejo",
         app_slogan: str = "Beyond coding. We Forge.",
         domain: str = "localhost",
@@ -23,6 +26,7 @@ def generate_config(
         database_info: dict[str, str] = {},
         log_level: str = "info",
         use_port_in_domain: bool = True,
+
     ) -> configparser.ConfigParser:
     """Get the running version of the workload."""
 
@@ -53,8 +57,8 @@ def generate_config(
         "DISABLE_SSH": "false",
         "SSH_PORT": "22",
         "LFS_START_SERVER": "true",
-        # TODO: Perhaps manage this with juju secrets so its not recreated frequently?
-        "LFS_JWT_SECRET": f"`{random_token()}`",
+        # "LFS_JWT_SECRET": lfs_jwt_secret,
+        "LFS_JWT_SECRET_URI": f"file:{lfs_jwt_secret}",
         "OFFLINE_MODE": "true",
     }
 
@@ -108,14 +112,14 @@ def generate_config(
 
     config["security"] = {
         "INSTALL_LOCK": "true",
-        # TODO: Perhaps manage this with juju secrets so its not recreated frequently?
-        "INTERNAL_TOKEN": f"`{random_token(length=105)}`",
+        # "INTERNAL_TOKEN": internal_token,
+        "INTERNAL_TOKEN_URI": f"file:{internal_token}",
         "PASSWORD_HASH_ALGO": "pbkdf2_hi"
     }
 
     config["oauth2"] = {
-        # TODO: Perhaps manage this with juju secrets so its not recreated frequently?
-        "JWT_SECRET": f"`{random_token()}`",
+        # "JWT_SECRET": jwt_secret,
+        "JWT_SECRET_URI": f"file:{jwt_secret}",
     }
 
     config["metrics"] = {
