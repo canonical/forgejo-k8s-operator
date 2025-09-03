@@ -314,7 +314,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
     def get_traefik_static_route_configuration(self) -> dict:
         return {
             "entryPoints": {
-                "ssh_tcp": {"address": SSH_PORT}
+                "ssh": {"address": f":{SSH_PORT}"}
             },
         }
 
@@ -346,7 +346,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                     f"{prefix}-ssh-router": {
                         "rule": "HostSNI(`*`)",
                         "service": f"{prefix}-ssh-service",
-                        "entryPoints": ["ssh_tcp"],
+                        "entryPoints": ["ssh"],
                     }
                 },
                 "services": {
