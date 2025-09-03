@@ -37,6 +37,7 @@ CUSTOM_FORGEJO_CONFIG_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "config.ini"
 #     CUSTOM_FORGEJO_JWT_SECRET_FILE: 43,
 # }
 PORT = 3000
+SSH_PORT = 30022
 FORGEJO_DATA_DIR = "/data"
 FORGEJO_SYSTEM_USER_ID = 1000
 FORGEJO_SYSTEM_USER = "git"
@@ -63,7 +64,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
     def __init__(self, framework: ops.Framework) -> None:
         super().__init__(framework)
         self._port = PORT
-        self.set_ports()
+        # self.set_ports()
+        self.unit.set_ports(PORT, SSH_PORT)
 
         self.ingress = TraefikRouteRequirer(
             self, self.model.get_relation("ingress"), "ingress", raw=True
@@ -212,7 +214,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                         f"Config domain {config.domain} is valid, submitting traefik route"
                     )
                     self.ingress.submit_to_traefik(
-                        self.get_traefik_route_configuration(config.domain)
+                        self.get_traefik_route_configuration(config.domain),
+                        static=self.get_traefik_static_route_configuration(),
                     )
                 else:
                     logger.error(f"No domain set in charm")
@@ -229,6 +232,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 log_level=config.log_level,
                 database_info=db_data,
                 use_port_in_domain=False,
+                ssh_port=SSH_PORT,
             )
             buf = StringIO()
             cfg.write(buf)
@@ -307,24 +311,28 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         return {}
 
 
-    @property
-    def traefik_service_name(self):
-        return f"{self.model.name}-{self.model.app.name}-service"
+    def get_traefik_static_route_configuration(self) -> dict:
+        return {
+            "entryPoints": {
+                "ssh_tcp": {"address": SSH_PORT}
+            },
+        }
 
 
     def get_traefik_route_configuration(self, domain: str) -> dict:
         """Configure a route from traefik to forgejo."""
+        prefix = f"{self.model.name}-{self.app.name}"
         return {
             "http": {
                 "routers": {
-                    f"{self.model.name}-{self.app.name}-router": {
+                    f"{prefix}-http-router": {
                         "rule": f"Host(`{domain}`)", # "ClientIP(`0.0.0.0/0`)"
-                        "service": self.traefik_service_name,
+                        "service": f"{prefix}-http-service",
                         "entryPoints": ["web"],
                     }
                 },
                 "services": {
-                    self.traefik_service_name: {
+                    f"{prefix}-http-service": {
                         "loadBalancer": {
                             "servers": [
                                 {"url": f"http://{self.app.name}.{self.model.name}.svc.cluster.local:{PORT}"}
@@ -332,7 +340,25 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                         }
                     }
                 }
-            }
+            },
+            "tcp": {
+                "routers": {
+                    f"{prefix}-ssh-router": {
+                        "rule": "HostSNI(`*`)",
+                        "service": f"{prefix}-ssh-service",
+                        "entryPoints": ["ssh_tcp"],
+                    }
+                },
+                "services": {
+                    f"{prefix}-ssh-service": {
+                        "loadBalancer": {
+                            "servers": [
+                                {"address": f"{self.app.name}.{self.model.name}.svc.cluster.local:{SSH_PORT}"}
+                            ]
+                        }
+                    }
+                }
+            },
         }
 
 

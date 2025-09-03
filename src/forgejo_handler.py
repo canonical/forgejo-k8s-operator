@@ -26,6 +26,7 @@ def generate_config(
         database_info: dict[str, str] = {},
         log_level: str = "info",
         use_port_in_domain: bool = True,
+        ssh_port: int = 22,
 
     ) -> configparser.ConfigParser:
     """Get the running version of the workload."""
@@ -55,9 +56,10 @@ def generate_config(
         "ROOT_URL": f"http://{final_domain}/",
         "APP_DATA_PATH": "/data/gitea/data",
         "DISABLE_SSH": "false",
-        "SSH_PORT": "22",
+        "SSH_PORT": str(ssh_port),
         "LFS_START_SERVER": "true",
         "OFFLINE_MODE": "true",
+        "START_SSH_SERVER": "true",
     }
 
     config["lfs"] = {
