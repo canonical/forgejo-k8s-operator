@@ -27,15 +27,15 @@ SERVICE_NAME = "forgejo"  # Name of Pebble service that runs in the workload con
 FORGEJO_CLI = "/usr/local/bin/forgejo"
 CUSTOM_FORGEJO_CONFIG_DIR = "/etc/forgejo/"
 CUSTOM_FORGEJO_CONFIG_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "config.ini"
-CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "lfs_jwt_secret"
-CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "internal_token"
-CUSTOM_FORGEJO_JWT_SECRET_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "jwt_secret"
-# map secret file to the secret length
-CUSTOM_FORGEJO_SECRETS = {
-    CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE: 43,
-    CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE: 105,
-    CUSTOM_FORGEJO_JWT_SECRET_FILE: 43,
-}
+# CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "lfs_jwt_secret"
+# CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "internal_token"
+# CUSTOM_FORGEJO_JWT_SECRET_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "jwt_secret"
+# # map secret file to the secret length
+# CUSTOM_FORGEJO_SECRETS = {
+#     CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE: 43,
+#     CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE: 105,
+#     CUSTOM_FORGEJO_JWT_SECRET_FILE: 43,
+# }
 PORT = 3000
 FORGEJO_DATA_DIR = "/data"
 FORGEJO_SYSTEM_USER_ID = 1000
@@ -81,6 +81,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             self, relation_name='grafana-dashboard'
         )
 
+        # framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.forgejo_pebble_ready, self.reconcile)
         framework.observe(self.on.config_changed, self.reconcile)
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
@@ -98,6 +99,19 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         self._name = "forgejo"
         self.container = self.unit.get_container(self._name)
         self.pebble_service_name = SERVICE_NAME
+
+
+    # def _on_install(self, _: ops.InstallEvent):
+    #     for secret_file, length in CUSTOM_FORGEJO_SECRETS.items():
+    #         if not self.container.exists(secret_file):
+    #             self.container.push(
+    #                 secret_file,
+    #                 secrets.token_urlsafe(length)[:length],
+    #                 make_dirs=True,
+    #                 user_id=FORGEJO_SYSTEM_USER_ID,
+    #                 user=FORGEJO_SYSTEM_USER,
+    #                 group_id=FORGEJO_SYSTEM_GROUP_ID
+    #             )
 
 
     @property
@@ -205,9 +219,12 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
             # write the config file to the forgejo container's filesystem
             cfg = generate_config(
-                CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE,
-                CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE,
-                CUSTOM_FORGEJO_JWT_SECRET_FILE,
+                # CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE,
+                # CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE,
+                # CUSTOM_FORGEJO_JWT_SECRET_FILE,
+                # self.lfs_jwt_secret,
+                # self.internal_token,
+                # self.jwt_secret,
                 domain=config.domain,
                 log_level=config.log_level,
                 database_info=db_data,
@@ -223,15 +240,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 user=FORGEJO_SYSTEM_USER,
                 group_id=FORGEJO_SYSTEM_GROUP_ID
             )
-            for secret_file, length in CUSTOM_FORGEJO_SECRETS.items():
-                if not self.container.exists(secret_file):
-                    self.container.push(
-                        secret_file,
-                        secrets.token_urlsafe(length)[:length],
-                        user_id=FORGEJO_SYSTEM_USER_ID,
-                        user=FORGEJO_SYSTEM_USER,
-                        group_id=FORGEJO_SYSTEM_GROUP_ID
-                    )
 
             self.container.add_layer('forgejo', self._get_pebble_layer(), combine=True)
             logger.info("Added updated layer 'forgejo' to Pebble plan")

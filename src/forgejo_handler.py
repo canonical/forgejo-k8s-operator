@@ -16,9 +16,9 @@ def random_token(length: int = 43) -> str:
     return secrets.token_urlsafe(length)[:length]
 
 def generate_config(
-        lfs_jwt_secret: str,
-        internal_token: str,
-        jwt_secret: str,
+        # lfs_jwt_secret: str,
+        # internal_token: str,
+        # jwt_secret: str,
         app_name: str = "Forgejo",
         app_slogan: str = "Beyond coding. We Forge.",
         domain: str = "localhost",
@@ -57,8 +57,6 @@ def generate_config(
         "DISABLE_SSH": "false",
         "SSH_PORT": "22",
         "LFS_START_SERVER": "true",
-        # "LFS_JWT_SECRET": lfs_jwt_secret,
-        "LFS_JWT_SECRET_URI": f"file:{lfs_jwt_secret}",
         "OFFLINE_MODE": "true",
     }
 
@@ -85,7 +83,8 @@ def generate_config(
 
     config["openid"] = {
         "ENABLE_OPENID_SIGNIN": "true",
-        "ENABLE_OPENID_SIGNUP": "true"
+        "ENABLE_OPENID_SIGNUP": "true",
+        "WHITELISTED_URIS": "login.ubuntu.com"
     }
 
     config["cron.update_checker"] = {
@@ -112,14 +111,13 @@ def generate_config(
 
     config["security"] = {
         "INSTALL_LOCK": "true",
-        # "INTERNAL_TOKEN": internal_token,
-        "INTERNAL_TOKEN_URI": f"file:{internal_token}",
+        "INTERNAL_TOKEN": "",
+        # "INTERNAL_TOKEN_URI": f"file:{internal_token}",
         "PASSWORD_HASH_ALGO": "pbkdf2_hi"
     }
 
     config["oauth2"] = {
-        # "JWT_SECRET": jwt_secret,
-        "JWT_SECRET_URI": f"file:{jwt_secret}",
+        "enabled": "true",
     }
 
     config["metrics"] = {
