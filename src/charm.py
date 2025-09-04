@@ -4,12 +4,12 @@
 
 """Forgejo K8s Charm."""
 
+from base64 import b64encode
 import dataclasses
 from io import StringIO
 import logging
 import ops
 import re
-import socket
 from typing import Optional
 import secrets
 
@@ -18,8 +18,11 @@ from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
+from lightkube import Client
+from lightkube.resources.core_v1 import Secret
+from lightkube.models.meta_v1 import ObjectMeta
 
-from forgejo_handler import generate_config, random_token
+from forgejo_handler import generate_config
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +60,10 @@ class ForgejoConfig:
             raise ValueError('Invalid log level number, should be one of trace, debug, info, warn, error, or fatal')
 
 
+def random_token(length: int = 43) -> str:
+    return secrets.token_urlsafe(length)[:length]
+
+
 class ForgejoK8SOperatorCharm(ops.CharmBase):
     """Forgejo K8s Charm."""
 
@@ -81,7 +88,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             self, relation_name='grafana-dashboard'
         )
 
-        # framework.observe(self.on.install, self._on_install)
+        framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.forgejo_pebble_ready, self.reconcile)
         framework.observe(self.on.config_changed, self._on_config_changed)
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
@@ -101,17 +108,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         self.pebble_service_name = SERVICE_NAME
 
 
-    # def _on_install(self, _: ops.InstallEvent):
-    #     for secret_file, length in CUSTOM_FORGEJO_SECRETS.items():
-    #         if not self.container.exists(secret_file):
-    #             self.container.push(
-    #                 secret_file,
-    #                 secrets.token_urlsafe(length)[:length],
-    #                 make_dirs=True,
-    #                 user_id=FORGEJO_SYSTEM_USER_ID,
-    #                 user=FORGEJO_SYSTEM_USER,
-    #                 group_id=FORGEJO_SYSTEM_GROUP_ID
-    #             )
+    def _on_install(self, _: ops.InstallEvent):
+        self.get_or_create_forgejo_secrets()
 
 
     @property
@@ -120,8 +118,39 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
 
     @property
-    def hostname(self) -> str:
-        return socket.getfqdn()
+    def k8s_secrets_name(self):
+        return f"{self.app.name}-secrets"
+
+
+    def get_or_create_forgejo_secrets(self) -> dict | None:
+        """Create one-time Forgejo secrets in Kubernetes."""
+        client = Client()
+
+        try:
+            secret = client.get(Secret, name=self.k8s_secrets_name, namespace=self.model.name)
+            data = secret.data
+            logger.info(f"Secret '{self.k8s_secrets_name}' found. Using existing values.")
+        except Exception as e:
+            if "not found" not in str(e).lower():
+                logger.error(f"Something went wrong when trying to get k8s secret {self.k8s_secrets_name}, got {e}")
+                return
+
+            logger.info(f"K8s secret {self.k8s_secrets_name} not found, creating it...")
+
+            data = {
+                "LFS_JWT_SECRET": b64encode(random_token().encode()).decode(),
+                "INTERNAL_TOKEN": b64encode(random_token(105).encode()).decode(),
+                "JWT_SECRET": b64encode(random_token().encode()).decode(),
+            }
+            secret = Secret(
+                metadata=ObjectMeta(name=self.k8s_secrets_name, namespace=self.model.name),
+                type="Opaque",
+                data=data,
+            )
+            client.create(secret)
+            logger.info(f"Secret '{self.k8s_secrets_name}' created successfully.")
+
+        return data
 
 
     def _on_collect_status(self, event: ops.CollectStatusEvent) -> None:
@@ -226,8 +255,14 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 else:
                     logger.error(f"No domain set in charm")
 
+            secrets = self.get_or_create_forgejo_secrets()
+            if not secrets:
+                self.unit.status = ops.BlockedStatus(f"Can not get forgejo secrets {self.k8s_secrets_name} to start")
+                return
+
             # write the config file to the forgejo container's filesystem
             cfg = generate_config(
+                secrets=secrets,
                 domain=config.domain,
                 log_level=config.log_level,
                 database_info=db_data,

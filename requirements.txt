@@ -1,1 +1,3 @@
 ops ~= 2.17
+lightkube ~= 0.17.2
+lightkube-models ~= 1.34.0.8

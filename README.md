@@ -21,7 +21,7 @@ Charmed k8s operator for forgejo.
 Example deloyment:
 
 ```sh
-juju deploy forgejo-k8s
+juju deploy forgejo-k8s --trust
 juju deploy postgresql-k8s --channel=14/stable --trust
 juju deploy traefik-k8s --config external_hostname=internal --trust
 
