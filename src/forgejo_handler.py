@@ -16,9 +16,6 @@ def random_token(length: int = 43) -> str:
     return secrets.token_urlsafe(length)[:length]
 
 def generate_config(
-        # lfs_jwt_secret: str,
-        # internal_token: str,
-        # jwt_secret: str,
         app_name: str = "Forgejo",
         app_slogan: str = "Beyond coding. We Forge.",
         domain: str = "localhost",

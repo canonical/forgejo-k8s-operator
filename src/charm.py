@@ -83,7 +83,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
         # framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.forgejo_pebble_ready, self.reconcile)
-        framework.observe(self.on.config_changed, self.reconcile)
+        framework.observe(self.on.config_changed, self._on_config_changed)
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
         framework.observe(getattr(self.on, "data_storage_attached"), self._on_storage_attached)
 
@@ -194,6 +194,15 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         return ops.pebble.Layer(pebble_layer)
 
 
+    def _on_config_changed(self, e: ops.ConfigChangedEvent):
+        self.reconcile(e)
+        if not self.container.get_plan().services.get(self.pebble_service_name):
+            logger.error("Cannot (re)start service: service does not (yet) exist.")
+            return
+        logger.info(f"Restarting service {self.pebble_service_name}")
+        self.container.restart(self.pebble_service_name)
+
+
     def reconcile(self, _: ops.HookEvent) -> None:
         self.unit.status = ops.MaintenanceStatus("starting workload")
         try:
@@ -219,12 +228,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
             # write the config file to the forgejo container's filesystem
             cfg = generate_config(
-                # CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE,
-                # CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE,
-                # CUSTOM_FORGEJO_JWT_SECRET_FILE,
-                # self.lfs_jwt_secret,
-                # self.internal_token,
-                # self.jwt_secret,
                 domain=config.domain,
                 log_level=config.log_level,
                 database_info=db_data,
