@@ -19,7 +19,7 @@ from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 
-from forgejo_handler import generate_config
+from forgejo_handler import generate_config, random_token
 
 logger = logging.getLogger(__name__)
 
@@ -342,6 +342,67 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
     def _on_storage_attached(self, _: ops.StorageAttachedEvent) -> None:
         self.container.exec(["chown", f"{FORGEJO_SYSTEM_USER}:{FORGEJO_SYSTEM_GROUP}", FORGEJO_DATA_DIR])
 
+
+    def _on_git_access_added(self, _) -> None:
+        user = "unique-relation-name"
+        if self._create_admin_user(user, random_token(24), f"{user}@{self.config.domain}"):
+            token = self._get_admin_access_token(user, f"{user}-admin-token")
+            if token:
+                # write token to relation databag TODO: create a secret instead and grant access to the secret
+                logger.info("Successfully wrote token to the databag")
+                return
+        else:
+            logger.error(f"Failed to create admin user {user}")
+
+
+    def _on_git_access_removed(self, _) -> None:
+        # TODO: Clear databag and revoke access to secret
+        return
+
+
+    def _create_admin_user(self, user: str, password: str, email: str) -> bool:
+        cmd = [
+            "forgejo",
+            f"--config={CUSTOM_FORGEJO_CONFIG_FILE}",
+            "admin",
+            "user",
+            "create",
+            "--username", user,
+            "--password", password,
+            "--email", email,
+            "--admin",
+        ]
+        output, _ = self.container.exec(command=cmd, user=FORGEJO_SYSTEM_USER).wait_output()
+
+        output_fmt = output.lower()
+        if "user already exists" in output_fmt or "successfully created" in output_fmt:
+            return True
+ 
+        return False
+
+
+    def _get_admin_access_token(self, user: str, token_name: str) -> str:
+        if not user:
+            logger.error("Can not create admin token, no user defined")
+        cmd = [
+            "forgejo",
+            f"--config={CUSTOM_FORGEJO_CONFIG_FILE}",
+            "admin",
+            "user",
+            "generate-access-token",
+            "--username", user,
+            "--scopes", "all",
+            "--token-name", token_name,
+            "--raw",
+        ]
+        output, _ = self.container.exec(command=cmd, user=FORGEJO_SYSTEM_USER).wait_output()
+        if "error" in output:
+            logger.error(f"Failed to create admin access token for {user}, got: {output}")
+            output = ""
+        else:
+            logger.info(f"Successfully created admin access token for {user}")
+
+        return output
 
 
 

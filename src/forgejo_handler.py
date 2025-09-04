@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 def random_token(length: int = 43) -> str:
     return secrets.token_urlsafe(length)[:length]
 
+
 def generate_config(
         app_name: str = "Forgejo",
         app_slogan: str = "Beyond coding. We Forge.",
