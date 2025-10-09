@@ -261,6 +261,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             logger.error("Cannot (re)start service: service does not (yet) exist.")
             return
         logger.info(f"Restarting service {self.pebble_service_name}")
+        # TODO: consider and test forgejo manager restart for a more graceful approach
         self.container.restart(self.pebble_service_name)
 
 

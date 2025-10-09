@@ -42,3 +42,23 @@ HTTP/1.1 200 OK
 Date: Tue, 02 Sep 2025 19:40:37 GMT
 ```
 
+
+## Dealing with traefik from another model
+
+Create the offer in the model its deployed
+
+```sh
+MODEL=
+juju offer admin/${MODEL?}.traefik:traefik-route traefik-route
+```
+
+Consume the offer in your model where forgejo is
+
+```sh
+juju consume admin/${MODEL?}.traefik-route traefik-route
+```
+
+Then relate it to forgejo
+```sh
+juju integrate forgejo-k8s traefik-route
+```
