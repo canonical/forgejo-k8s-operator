@@ -113,6 +113,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.forgejo_pebble_ready, self.reconcile)
         framework.observe(self.on.config_changed, self._on_config_changed)
+        framework.observe(self.ingress.on.ready, self.reconcile)
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
         framework.observe(getattr(self.on, "data_storage_attached"), self._on_storage_attached)
 
@@ -316,7 +317,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             if scheme:
                 scheme = scheme.lower()
                 if scheme not in ["http", "https"]:
-                    logger.warning(f"Got scheme {scheme} from traefik databag, but on http or https is supported, so falling back to http")
+                    logger.warning(f"Got scheme {scheme} from traefik databag, but only http or https is supported, so falling back to http")
                     protocol = "http"
                 else:
                     protocol = scheme
