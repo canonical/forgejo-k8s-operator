@@ -91,6 +91,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         # actions
         framework.observe(self.on.generate_runner_secret_action, self._on_generate_runner_secret)
         framework.observe(self.on.create_admin_user_action, self._on_create_admin_user)
+        framework.observe(self.on.generate_user_token_action, self._on_generate_user_token)
 
         # database support
         self.database = DatabaseRequires(
@@ -394,6 +395,31 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         argv = ["su", "git", "-c", cmd]
         output, _ = self.container.exec(argv).wait_output()
         event.set_results({"output": output})
+
+
+    def _on_generate_user_token(self, event: ops.ActionEvent) -> None:
+        """Generate an API access token for the specified Forgejo user."""
+        params = event.params
+        username = params.get("username")
+        token_name = params.get("token-name", "charm-token")
+        scopes = params.get("scopes", "all")
+        if not username:
+            event.fail("username parameter is required")
+            return
+        cmd = (
+          f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini admin user generate-access-token "
+          f"--username {shlex.quote(username)} "
+          f"--token-name {shlex.quote(token_name)} "
+          f"--scopes {shlex.quote(scopes)} "
+          f"--raw"
+        )
+        argv = ["su", "git", "-c", cmd]
+        try:
+            output, _ = self.container.exec(argv).wait_output()
+        except ops.pebble.ExecError as e:
+            event.fail(f"Failed to generate token: {e.stderr}")
+            return
+        event.set_results({"token": output.strip()})
 
 
 if __name__ == "__main__":  # pragma: nocover

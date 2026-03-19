@@ -5,7 +5,7 @@ summary: Charmed Kubernetes operator for Forgejo.
 description: |
   Deploy and configure the software forge, Forgejo.
 
-base: ubuntu@22.04
+base: ubuntu@24.04
 platforms:
   amd64:
   arm64:
@@ -127,4 +127,21 @@ actions:
     required:
     - username
     - email
+
+  generate-user-token:
+    description: Generate an API access token for the specified Forgejo user.
+    params:
+      username:
+        type: string
+        description: Username of the Forgejo user to generate the token for.
+      token-name:
+        type: string
+        description: Name to assign to the generated token (default is "charm-token").
+      scopes:
+        type: string
+        description: |
+          Comma separated list of scopes to apply to access token
+          Examples "all", "public-only,read:issue", "write:repository,write:user" (default is "all")
+    required:
+    - username
 
