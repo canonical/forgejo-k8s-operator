@@ -90,7 +90,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         # TLS certificates support
         self.cert_handler = CertHandler(
             self,
-            common_name=self.app.name,
+            common_name=self.model.config.get("domain") or self.app.name,
             events=[self.on.config_changed, self.on.forgejo_pebble_ready],
         )
         framework.observe(
