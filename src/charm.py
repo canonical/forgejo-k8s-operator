@@ -408,6 +408,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         """Handle new/updated TLS certificate - switch Forgejo to HTTPS."""
         logger.info("TLS certificate available, switching to HTTPS")
         self.reconcile(event)
+        self._restart_service()
 
     def _on_certificates_removed(self, event: ops.EventBase) -> None:
         """Handle TLS certificate removal - switch Forgejo back to HTTP."""
@@ -415,6 +416,18 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         if self.container.can_connect():
             self.cert_handler.remove_certs()
         self.reconcile(event)
+        self._restart_service()
+
+    def _restart_service(self) -> None:
+        """Restart the Forgejo service if it is currently running."""
+        if not self.container.can_connect():
+            return
+        try:
+            if self.container.get_service(self.pebble_service_name).is_running():
+                self.container.restart(self.pebble_service_name)
+                logger.info(f"Restarted {self.pebble_service_name} to pick up certificate changes")
+        except (ops.pebble.APIError, ops.ModelError) as e:
+            logger.warning("Could not restart service: %s", e)
 
     def _on_storage_attached(self, _: ops.StorageAttachedEvent) -> None:
         self.container.exec(["chown", f"{FORGEJO_SYSTEM_USER}:{FORGEJO_SYSTEM_GROUP}", FORGEJO_DATA_DIR])
