@@ -158,3 +158,15 @@ actions:
     required:
     - username
 
+  reset-user-password:
+    description: Reset the password for a Forgejo user to a new random password.
+    params:
+      username:
+        type: string
+        descriusernameption: Username of the Forgejo user whose password should be reset.
+      password:
+        type: string
+        description: New password to be set for the user.
+    required:
+    - username
+    - password

@@ -85,6 +85,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         framework.observe(self.on.generate_runner_secret_action, self._on_generate_runner_secret)
         framework.observe(self.on.create_admin_user_action, self._on_create_admin_user)
         framework.observe(self.on.generate_user_token_action, self._on_generate_user_token)
+        framework.observe(self.on.reset_user_password_action, self._on_reset_user_password)
 
         # TLS certificates support
         self.cert_handler = CertHandler(
@@ -491,6 +492,26 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             return
         event.set_results({"token": output.strip()})
 
+
+    def _on_reset_user_password(self, event: ops.ActionEvent) -> None:
+        """Reset a Forgejo user's password to a new random value."""
+        username = event.params.get("username")
+        password = event.params.get("password")
+        if not username:
+            event.fail("username parameter is required")
+            return
+        cmd = (
+          f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini admin user change-password "
+          f"--username {shlex.quote(username)} "
+          f"--password {shlex.quote(password)}"
+        )
+        argv = ["su", "git", "-c", cmd]
+        try:
+            output, _ = self.container.exec(argv).wait_output()
+        except ops.pebble.ExecError as e:
+            event.fail(f"Failed to reset password: {e.stderr}")
+            return
+        event.set_results({"output": output.strip()})
 
 if __name__ == "__main__":  # pragma: nocover
     ops.main(ForgejoK8SOperatorCharm)
