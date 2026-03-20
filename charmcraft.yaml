@@ -30,6 +30,14 @@ requires:
     description: |
       Integration to obtain an ingressed address to access Foregjo from outside the model.
       Note that you should use subdomain mode in traefik with a custom domain name.
+  certificates:
+    interface: tls-certificates
+    limit: 1
+    optional: true
+    description: |
+      Integration to obtain a TLS certificate for Forgejo.
+      When related, Forgejo will be configured to serve over HTTPS on port 443.
+      When removed, Forgejo will revert to HTTP on port 80.
 
 provides:
   metrics-endpoint:
@@ -52,6 +60,8 @@ charm-libs:
     version: "0"
   - lib: traefik_k8s.traefik_route
     version: "0"
+  - lib: tls_certificates_interface.tls_certificates
+    version: "4"
 
 
 containers:
@@ -76,6 +86,9 @@ parts:
   charm:
     plugin: charm
     source: .
+    build-packages:
+      - libssl-dev
+      - pkg-config
 
 config:
   options:

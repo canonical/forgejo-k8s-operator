@@ -23,6 +23,9 @@ def generate_config(
         database_info: dict[str, str] = {},
         log_level: str = "info",
         use_port_in_domain: bool = True,
+        tls_enabled: bool = False,
+        cert_file: str = "",
+        key_file: str = "",
 
     ) -> configparser.ConfigParser:
     """Get the running version of the workload."""
@@ -45,17 +48,23 @@ def generate_config(
     }
 
     final_domain = f"{domain}:{http_port}" if use_port_in_domain else domain
-    config["server"] = {
+    protocol = "https" if tls_enabled else "http"
+    server_config: dict[str, str] = {
         "SSH_DOMAIN": domain,
         "DOMAIN": domain,
         "HTTP_PORT": str(http_port),
-        "ROOT_URL": f"http://{final_domain}/",
+        "ROOT_URL": f"{protocol}://{final_domain}/",
         "APP_DATA_PATH": "/data/gitea/data",
         "DISABLE_SSH": "false",
         "SSH_PORT": "22",
         "LFS_START_SERVER": "true",
         "OFFLINE_MODE": "true",
     }
+    if tls_enabled and cert_file and key_file:
+        server_config["PROTOCOL"] = "https"
+        server_config["CERT_FILE"] = cert_file
+        server_config["KEY_FILE"] = key_file
+    config["server"] = server_config
 
     config["lfs"] = {
         "PATH": "/data/gitea/data/lfs"

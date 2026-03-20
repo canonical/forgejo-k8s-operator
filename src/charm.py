@@ -20,6 +20,7 @@ from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 
+from certificates import CertHandler
 from forgejo_handler import generate_config
 
 logger = logging.getLogger(__name__)
@@ -28,16 +29,7 @@ SERVICE_NAME = "forgejo"  # Name of Pebble service that runs in the workload con
 FORGEJO_CLI = "/usr/local/bin/forgejo"
 CUSTOM_FORGEJO_CONFIG_DIR = "/etc/forgejo/"
 CUSTOM_FORGEJO_CONFIG_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "config.ini"
-# CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "lfs_jwt_secret"
-# CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "internal_token"
-# CUSTOM_FORGEJO_JWT_SECRET_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "jwt_secret"
-# # map secret file to the secret length
-# CUSTOM_FORGEJO_SECRETS = {
-#     CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE: 43,
-#     CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE: 105,
-#     CUSTOM_FORGEJO_JWT_SECRET_FILE: 43,
-# }
-PORT = 3000
+PORT = 3000  # Forgejo's internal listen port (non-privileged, runs as git user uid 1000)
 FORGEJO_DATA_DIR = "/data"
 FORGEJO_SYSTEM_USER_ID = 1000
 FORGEJO_SYSTEM_USER = "git"
@@ -63,8 +55,9 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
     def __init__(self, framework: ops.Framework) -> None:
         super().__init__(framework)
-        self._port = PORT
-        self.set_ports()
+        self._name = "forgejo"
+        self.container = self.unit.get_container(self._name)
+        self.pebble_service_name = SERVICE_NAME
 
         self.ingress = TraefikRouteRequirer(
             self, self.model.get_relation("ingress"), "ingress", raw=True
@@ -93,6 +86,19 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         framework.observe(self.on.create_admin_user_action, self._on_create_admin_user)
         framework.observe(self.on.generate_user_token_action, self._on_generate_user_token)
 
+        # TLS certificates support
+        self.cert_handler = CertHandler(
+            self,
+            common_name=self.app.name,
+            events=[self.on.config_changed, self.on.forgejo_pebble_ready],
+        )
+        framework.observe(
+            self.cert_handler.certificates.on.certificate_available, self._on_certificates_available
+        )
+        framework.observe(self.on["certificates"].relation_changed, self._on_certificates_available)
+        framework.observe(self.on["certificates"].relation_departed, self._on_certificates_removed)
+        framework.observe(self.on["certificates"].relation_broken, self._on_certificates_removed)
+
         # database support
         self.database = DatabaseRequires(
             self,
@@ -102,9 +108,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         framework.observe(self.database.on.database_created, self.reconcile)
         framework.observe(self.database.on.endpoints_changed, self.reconcile)
 
-        self._name = "forgejo"
-        self.container = self.unit.get_container(self._name)
-        self.pebble_service_name = SERVICE_NAME
+        self.set_ports()
 
 
     # def _on_install(self, _: ops.InstallEvent):
@@ -148,6 +152,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         if not self.ingress.is_ready():
             # We need the Forgejo <-> Ingress relation to finish integrating.
             event.add_status(ops.WaitingStatus('Waiting for ingress relation'))
+        if self.model.get_relation('certificates') and not self.cert_handler.configure_certs():
+            event.add_status(ops.WaitingStatus('Waiting for TLS certificate'))
         try:
             status = self.container.get_service(self.pebble_service_name)
         except (ops.pebble.APIError, ops.pebble.ConnectionError, ops.ModelError):
@@ -157,7 +163,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 event.add_status(ops.MaintenanceStatus('Waiting for Forgejo to start up'))
         # If nothing is wrong, then the status is active.
         if config:
-            event.add_status(ops.ActiveStatus(f"Serving at {config.domain}"))
+            scheme = "https" if self._tls_enabled else "http"
+            event.add_status(ops.ActiveStatus(f"Serving at {scheme}://{config.domain}"))
         else:
             event.add_status(ops.ActiveStatus())
 
@@ -221,13 +228,18 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         try:
             db_data = self.fetch_postgres_relation_data()
 
-            if self.ingress.is_ready():
+            # Configure TLS if certificates relation is available.
+            # Forgejo always listens on PORT (3000) regardless of TLS state;
+            # the protocol is controlled via the PROTOCOL/CERT_FILE/KEY_FILE config.
+            tls_ready = self.cert_handler.configure_certs()
+
+            if self.ingress.is_ready() and self.unit.is_leader():
                 if config.domain:
                     logger.info(
                         f"Config domain {config.domain} is valid, submitting traefik route"
                     )
                     self.ingress.submit_to_traefik(
-                        self.get_traefik_route_configuration(config.domain)
+                        self.get_traefik_route_configuration(config.domain, tls_ready)
                     )
                 else:
                     logger.error(f"No domain set in charm")
@@ -238,6 +250,10 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 log_level=config.log_level,
                 database_info=db_data,
                 use_port_in_domain=False,
+                http_port=PORT,
+                tls_enabled=tls_ready,
+                cert_file=self.cert_handler.cert_path if tls_ready else "",
+                key_file=self.cert_handler.key_path if tls_ready else "",
             )
             buf = StringIO()
             cfg.write(buf)
@@ -267,10 +283,17 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             logger.info('Unable to connect to Pebble: %s', e)
 
 
+    @property
+    def _tls_enabled(self) -> bool:
+        """Return True if TLS certificates are provisioned in the relation data."""
+        if not self.model.get_relation('certificates'):
+            return False
+        return self.cert_handler._certificate_is_available()
+
     def set_ports(self):
         """Open necessary (and close no longer needed) workload ports."""
         planned_ports = {
-            ops.model.OpenedPort("tcp", self._port),
+            ops.model.OpenedPort("tcp", PORT),
         }
         actual_ports = self.unit.opened_ports()
 
@@ -321,13 +344,48 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         return f"{self.model.name}-{self.model.app.name}-service"
 
 
-    def get_traefik_route_configuration(self, domain: str) -> dict:
-        """Configure a route from traefik to forgejo."""
+    def get_traefik_route_configuration(self, domain: str, tls_enabled: bool = False) -> dict:
+        """Configure a route from traefik to forgejo.
+
+        Forgejo always listens on PORT (3000) internally, running as a non-root user.
+        Traefik handles the external 80/443 mapping.
+
+        HTTP mode: standard HTTP router forwarding to Forgejo on port 3000.
+        TLS mode: TCP TLS-passthrough router so Forgejo terminates TLS on port 3000.
+        """
+        router_name = f"{self.model.name}-{self.model.app.name}-router"
+        # Use the stable Kubernetes service DNS so the address survives pod restarts.
+        k8s_service = f"{self.app.name}.{self.model.name}.svc.cluster.local"
+
+        if tls_enabled:
+            # TCP passthrough: Traefik forwards raw TLS bytes; Forgejo terminates TLS.
+            # HostSNI matches on the TLS SNI field, which requires passthrough mode.
+            return {
+                "tcp": {
+                    "routers": {
+                        router_name: {
+                            "rule": f"HostSNI(`{domain}`)",
+                            "service": self.traefik_service_name,
+                            "entryPoints": ["websecure"],
+                            "tls": {"passthrough": True},
+                        }
+                    },
+                    "services": {
+                        self.traefik_service_name: {
+                            "loadBalancer": {
+                                "servers": [{"address": f"{k8s_service}:{PORT}"}],
+                            }
+                        }
+                    },
+                }
+            }
+
+        # HTTP mode
         return {
             "http": {
                 "routers": {
-                    f"{self.model.name}-{self.app.name}-router": {
-                        "rule": f"Host(`{domain}`)", # "ClientIP(`0.0.0.0/0`)"
+                    router_name: {
+                        "rule": f"Host(`{domain}`)",
                         "service": self.traefik_service_name,
                         "entryPoints": ["web"],
                     }
@@ -336,14 +394,26 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                     self.traefik_service_name: {
                         "loadBalancer": {
                             "servers": [
-                                {"url": f"http://{self.app.name}.{self.model.name}.svc.cluster.local:{PORT}"}
+                                {"url": f"http://{k8s_service}:{PORT}"}
                             ]
                         }
                     }
-                }
+                },
             }
         }
 
+
+    def _on_certificates_available(self, event: ops.EventBase) -> None:
+        """Handle new/updated TLS certificate - switch Forgejo to HTTPS."""
+        logger.info("TLS certificate available, switching to HTTPS")
+        self.reconcile(event)
+
+    def _on_certificates_removed(self, event: ops.EventBase) -> None:
+        """Handle TLS certificate removal - switch Forgejo back to HTTP."""
+        logger.info("TLS certificates removed, switching back to HTTP")
+        if self.container.can_connect():
+            self.cert_handler.remove_certs()
+        self.reconcile(event)
 
     def _on_storage_attached(self, _: ops.StorageAttachedEvent) -> None:
         self.container.exec(["chown", f"{FORGEJO_SYSTEM_USER}:{FORGEJO_SYSTEM_GROUP}", FORGEJO_DATA_DIR])
