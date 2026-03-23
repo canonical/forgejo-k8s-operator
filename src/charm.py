@@ -43,11 +43,29 @@ class ForgejoConfig:
 
     log_level: str = "info"
     domain: str = "forgejo.internal"
+    openid_whitelisted_uris: str = ""
+    disable_ssh: bool = False
+    disable_registration: bool = False
+    require_signin_view: bool = False
+    default_keep_email_private: bool = True
+    default_allow_create_organization: bool = True
+    enable_openid_signin: bool = True
+    enable_openid_signup: bool = True
+    default_user_visibility: str = "public"
+    default_org_visibility: str = "public"
+    disable_users_page: bool = False
+    disable_organizations_page: bool = False
+    disable_code_page: bool = False
 
     def __post_init__(self):
         """Configuration validation."""
         if self.log_level not in ['trace', 'debug', 'info', 'warn', 'error', 'fatal']:
             raise ValueError('Invalid log level number, should be one of trace, debug, info, warn, error, or fatal')
+        _valid_visibility = {'public', 'limited', 'private'}
+        if self.default_user_visibility not in _valid_visibility:
+            raise ValueError('Invalid default-user-visibility, must be one of public, limited, or private')
+        if self.default_org_visibility not in _valid_visibility:
+            raise ValueError('Invalid default-org-visibility, must be one of public, limited, or private')
 
 
 class ForgejoK8SOperatorCharm(ops.CharmBase):
@@ -255,6 +273,19 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 tls_enabled=tls_ready,
                 cert_file=self.cert_handler.cert_path if tls_ready else "",
                 key_file=self.cert_handler.key_path if tls_ready else "",
+                openid_whitelisted_uris=config.openid_whitelisted_uris,
+                disable_ssh=config.disable_ssh,
+                disable_registration=config.disable_registration,
+                require_signin_view=config.require_signin_view,
+                default_keep_email_private=config.default_keep_email_private,
+                default_allow_create_organization=config.default_allow_create_organization,
+                enable_openid_signin=config.enable_openid_signin,
+                enable_openid_signup=config.enable_openid_signup,
+                default_user_visibility=config.default_user_visibility,
+                default_org_visibility=config.default_org_visibility,
+                disable_users_page=config.disable_users_page,
+                disable_organizations_page=config.disable_organizations_page,
+                disable_code_page=config.disable_code_page,
             )
             buf = StringIO()
             cfg.write(buf)

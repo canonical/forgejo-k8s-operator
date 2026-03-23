@@ -107,6 +107,67 @@ config:
         the final url has both domains, like <forgejo-charm-config-domain>.<ingress-domain>
       default: "forgejo.internal"
       type: string
+    openid-whitelisted-uris:
+      description: |
+        Comma-separated list of OpenID URIs to whitelist for sign-in/sign-up.
+
+        When empty, no whitelist restriction is applied.
+      default: ""
+      type: string
+    disable-ssh:
+      description: Disable SSH support in Forgejo.
+      default: false
+      type: boolean
+    disable-registration:
+      description: Disable user self-registration.
+      default: false
+      type: boolean
+    require-signin-view:
+      description: Require users to sign in to view any page.
+      default: false
+      type: boolean
+    default-keep-email-private:
+      description: Set new users' email address to private by default.
+      default: true
+      type: boolean
+    default-allow-create-organization:
+      description: Allow users to create organizations by default.
+      default: true
+      type: boolean
+    enable-openid-signin:
+      description: Enable sign-in via OpenID.
+      default: true
+      type: boolean
+    enable-openid-signup:
+      description: Enable sign-up via OpenID.
+      default: true
+      type: boolean
+    default-user-visibility:
+      description: |
+        Default visibility for new users.
+
+        Acceptable values are "public", "limited", or "private".
+      default: "public"
+      type: string
+    default-org-visibility:
+      description: |
+        Default visibility for new organizations.
+
+        Acceptable values are "public", "limited", or "private".
+      default: "public"
+      type: string
+    disable-users-page:
+      description: Disable the users explore page.
+      default: false
+      type: boolean
+    disable-organizations-page:
+      description: Disable the organizations explore page.
+      default: false
+      type: boolean
+    disable-code-page:
+      description: Disable the code explore page.
+      default: false
+      type: boolean
 
 assumes:
   - juju >= 3.5

@@ -26,6 +26,19 @@ def generate_config(
         tls_enabled: bool = False,
         cert_file: str = "",
         key_file: str = "",
+        openid_whitelisted_uris: str = "",
+        disable_ssh: bool = False,
+        disable_registration: bool = False,
+        require_signin_view: bool = False,
+        default_keep_email_private: bool = True,
+        default_allow_create_organization: bool = True,
+        enable_openid_signin: bool = True,
+        enable_openid_signup: bool = True,
+        default_user_visibility: str = "public",
+        default_org_visibility: str = "public",
+        disable_users_page: bool = False,
+        disable_organizations_page: bool = False,
+        disable_code_page: bool = False,
 
     ) -> configparser.ConfigParser:
     """Get the running version of the workload."""
@@ -55,7 +68,7 @@ def generate_config(
         "HTTP_PORT": str(http_port),
         "ROOT_URL": f"{protocol}://{final_domain}/",
         "APP_DATA_PATH": "/data/gitea/data",
-        "DISABLE_SSH": "false",
+        "DISABLE_SSH": str(disable_ssh).lower(),
         "SSH_PORT": "22",
         "LFS_START_SERVER": "true",
         "OFFLINE_MODE": "true",
@@ -77,20 +90,30 @@ def generate_config(
     config["service"] = {
         "REGISTER_EMAIL_CONFIRM": "false",
         "ENABLE_NOTIFY_MAIL": "false",
-        "DISABLE_REGISTRATION": "false",
+        "DISABLE_REGISTRATION": str(disable_registration).lower(),
         "ALLOW_ONLY_EXTERNAL_REGISTRATION": "false",
         "ENABLE_CAPTCHA": "true",
-        "REQUIRE_SIGNIN_VIEW": "false",
-        "DEFAULT_KEEP_EMAIL_PRIVATE": "false",
-        "DEFAULT_ALLOW_CREATE_ORGANIZATION": "true",
+        "REQUIRE_SIGNIN_VIEW": str(require_signin_view).lower(),
+        "DEFAULT_KEEP_EMAIL_PRIVATE": str(default_keep_email_private).lower(),
+        "DEFAULT_ALLOW_CREATE_ORGANIZATION": str(default_allow_create_organization).lower(),
         "DEFAULT_ENABLE_TIMETRACKING": "true",
-        "NO_REPLY_ADDRESS": "noreply.localhost"
+        "NO_REPLY_ADDRESS": "noreply.localhost",
+        "DEFAULT_USER_VISIBILITY": default_user_visibility,
+        "DEFAULT_ORG_VISIBILITY": default_org_visibility,
     }
 
-    config["openid"] = {
-        "ENABLE_OPENID_SIGNIN": "true",
-        "ENABLE_OPENID_SIGNUP": "true",
-        "WHITELISTED_URIS": "login.ubuntu.com"
+    openid_config: dict[str, str] = {
+        "ENABLE_OPENID_SIGNIN": str(enable_openid_signin).lower(),
+        "ENABLE_OPENID_SIGNUP": str(enable_openid_signup).lower(),
+    }
+    if openid_whitelisted_uris:
+        openid_config["WHITELISTED_URIS"] = openid_whitelisted_uris
+    config["openid"] = openid_config
+
+    config["explore"] = {
+        "DISABLE_USERS_PAGE": str(disable_users_page).lower(),
+        "DISABLE_ORGANIZATIONS_PAGE": str(disable_organizations_page).lower(),
+        "DISABLE_CODE_PAGE": str(disable_code_page).lower(),
     }
 
     config["cron.update_checker"] = {
