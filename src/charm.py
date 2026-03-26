@@ -32,21 +32,7 @@ SERVICE_NAME = "forgejo"  # Name of Pebble service that runs in the workload con
 FORGEJO_CLI = "/usr/local/bin/forgejo"
 CUSTOM_FORGEJO_CONFIG_DIR = "/etc/forgejo/"
 CUSTOM_FORGEJO_CONFIG_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "config.ini"
-<<<<<<< HEAD
 PORT = 3000  # Forgejo's internal listen port (non-privileged, runs as git user uid 1000)
-=======
-# CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "lfs_jwt_secret"
-# CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "internal_token"
-# CUSTOM_FORGEJO_JWT_SECRET_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "jwt_secret"
-# # map secret file to the secret length
-# CUSTOM_FORGEJO_SECRETS = {
-#     CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE: 43,
-#     CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE: 105,
-#     CUSTOM_FORGEJO_JWT_SECRET_FILE: 43,
-# }
-PORT = 3000
-SSH_PORT = 22222
->>>>>>> 2ec7a35 (Working traefik ssh config)
 FORGEJO_DATA_DIR = "/data"
 FORGEJO_SYSTEM_USER_ID = 1000
 FORGEJO_SYSTEM_USER = "git"
@@ -94,13 +80,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
     def __init__(self, framework: ops.Framework) -> None:
         super().__init__(framework)
-<<<<<<< HEAD
-        self._name = "forgejo"
-        self.container = self.unit.get_container(self._name)
-        self.pebble_service_name = SERVICE_NAME
-=======
         self.reconcile_ports()
->>>>>>> 2ec7a35 (Working traefik ssh config)
 
         self.ingress = TraefikRouteRequirer(
             self, self.model.get_relation("ingress"), "ingress", raw=True
@@ -152,7 +132,9 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         framework.observe(self.database.on.database_created, self.reconcile)
         framework.observe(self.database.on.endpoints_changed, self.reconcile)
 
-        self.set_ports()
+        self._name = "forgejo"
+        self.container = self.unit.get_container(self._name)
+        self.pebble_service_name = SERVICE_NAME
 
 
     def _on_install(self, _: ops.InstallEvent):
@@ -306,12 +288,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                         f"Config domain {config.domain} is valid, submitting traefik route"
                     )
                     self.ingress.submit_to_traefik(
-<<<<<<< HEAD
-                        self.get_traefik_route_configuration(config.domain, tls_ready)
-=======
                         self.get_dynamic_traefik_route_configuration(config.domain),
                         static=self.get_static_traefik_route_configuration,
->>>>>>> 2ec7a35 (Working traefik ssh config)
                     )
                 else:
                     logger.error(f"No domain set in charm, so can not generate ingress route")
@@ -330,7 +308,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 http_port=PORT,
                 ssh_port=SSH_PORT,
                 use_port_in_domain=False,
-                http_port=PORT,
                 tls_enabled=tls_ready,
                 cert_file=self.cert_handler.cert_path if tls_ready else "",
                 key_file=self.cert_handler.key_path if tls_ready else "",
@@ -376,7 +353,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             logger.info('Unable to connect to Pebble: %s', e)
 
 
-<<<<<<< HEAD
     @property
     def _tls_enabled(self) -> bool:
         """Return True if TLS certificates are provisioned in the relation data."""
@@ -384,17 +360,11 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             return False
         return self.cert_handler._certificate_is_available()
 
-    def set_ports(self):
-        """Open necessary (and close no longer needed) workload ports."""
-        planned_ports = {
-            ops.model.OpenedPort("tcp", PORT),
-=======
     def reconcile_ports(self):
         """Open necessary (and close no longer needed) workload ports."""
         planned_ports = {
             ops.model.OpenedPort("tcp", PORT),
             ops.model.OpenedPort("tcp", SSH_PORT),
->>>>>>> 2ec7a35 (Working traefik ssh config)
         }
 
         actual_ports = self.unit.opened_ports()
@@ -445,51 +415,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         return f"{self.model.name}-{self.model.app.name}-{service_type}-service"
 
 
-<<<<<<< HEAD
-    def get_traefik_route_configuration(self, domain: str, tls_enabled: bool = False) -> dict:
-        """Configure a route from traefik to forgejo.
-
-        Forgejo always listens on PORT (3000) internally, running as a non-root user.
-        Traefik handles the external 80/443 mapping.
-
-        HTTP mode: standard HTTP router forwarding to Forgejo on port 3000.
-        TLS mode: TCP TLS-passthrough router so Forgejo terminates TLS on port 3000.
-        """
-        router_name = f"{self.model.name}-{self.model.app.name}-router"
-        # Use the stable Kubernetes service DNS so the address survives pod restarts.
-        k8s_service = f"{self.app.name}.{self.model.name}.svc.cluster.local"
-
-        if tls_enabled:
-            # TCP passthrough: Traefik forwards raw TLS bytes; Forgejo terminates TLS.
-            # HostSNI matches on the TLS SNI field, which requires passthrough mode.
-            return {
-                "tcp": {
-                    "routers": {
-                        router_name: {
-                            "rule": f"HostSNI(`{domain}`)",
-                            "service": self.traefik_service_name,
-                            "entryPoints": ["websecure"],
-                            "tls": {"passthrough": True},
-                        }
-                    },
-                    "services": {
-                        self.traefik_service_name: {
-                            "loadBalancer": {
-                                "servers": [{"address": f"{k8s_service}:{PORT}"}],
-                            }
-                        }
-                    },
-                }
-            }
-
-        # HTTP mode
-        return {
-            "http": {
-                "routers": {
-                    router_name: {
-                        "rule": f"Host(`{domain}`)",
-                        "service": self.traefik_service_name,
-=======
     def get_dynamic_traefik_route_configuration(self, domain: str) -> dict:
         """Configure a route from traefik to forgejo."""
         return {
@@ -498,7 +423,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                     f"{self.model.name}-{self.app.name}-router": {
                         "rule": f"Host(`{domain}`)", # "ClientIP(`0.0.0.0/0`)"
                         "service": self.traefik_service_name(),
->>>>>>> 2ec7a35 (Working traefik ssh config)
                         "entryPoints": ["web"],
                     }
                 },
@@ -510,9 +434,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                             ]
                         }
                     }
-<<<<<<< HEAD
-                },
-=======
                 }
             },
             "tcp": {
@@ -549,7 +470,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 "ssh": {
                     "address": ":22"
                 }
->>>>>>> 2ec7a35 (Working traefik ssh config)
             }
         }
 

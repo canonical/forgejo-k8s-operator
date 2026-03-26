@@ -98,8 +98,13 @@ def generate_config(
 
     config["service"] = {
         "REGISTER_EMAIL_CONFIRM": "false",
+        "REGISTER_MANUAL_CONFIRM": "true",
         "ENABLE_NOTIFY_MAIL": "false",
+<<<<<<< HEAD
         "DISABLE_REGISTRATION": str(disable_registration).lower(),
+=======
+        "DISABLE_REGISTRATION": "true",
+>>>>>>> 12599d5 (Disable autoregistration)
         "ALLOW_ONLY_EXTERNAL_REGISTRATION": "false",
         "ENABLE_CAPTCHA": "true",
         "REQUIRE_SIGNIN_VIEW": str(require_signin_view).lower(),
