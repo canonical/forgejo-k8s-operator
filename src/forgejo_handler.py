@@ -40,6 +40,7 @@ def generate_config(
         disable_organizations_page: bool = False,
         disable_code_page: bool = False,
         protocol: str = "http",
+        disable_plain_registration: bool = True,
 
     ) -> configparser.ConfigParser:
     """Get the running version of the workload."""
@@ -96,7 +97,7 @@ def generate_config(
         "REGISTER_EMAIL_CONFIRM": "false",
         "REGISTER_MANUAL_CONFIRM": "true",
         "ENABLE_NOTIFY_MAIL": "false",
-        "DISABLE_REGISTRATION": str(disable_registration).lower(),
+        "DISABLE_REGISTRATION": str(disable_plain_registration).lower(), # this is only required if you don't want openid login
         "ALLOW_ONLY_EXTERNAL_REGISTRATION": "false",
         "ENABLE_CAPTCHA": "true",
         "REQUIRE_SIGNIN_VIEW": str(require_signin_view).lower(),

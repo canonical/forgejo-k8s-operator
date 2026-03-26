@@ -69,16 +69,18 @@ class ForgejoConfig:
     disable_users_page: bool = False
     disable_organizations_page: bool = False
     disable_code_page: bool = False
+    disable_plain_registration: bool = True
 
     def __post_init__(self):
         """Configuration validation."""
         if self.log_level not in ['trace', 'debug', 'info', 'warn', 'error', 'fatal']:
-            raise ValueError('Invalid log level number, should be one of trace, debug, info, warn, error, or fatal')
+            raise ValueError('Invalid log level, should be one of trace, debug, info, warn, error, or fatal')
         _valid_visibility = {'public', 'limited', 'private'}
         if self.default_user_visibility not in _valid_visibility:
             raise ValueError('Invalid default-user-visibility, must be one of public, limited, or private')
         if self.default_org_visibility not in _valid_visibility:
             raise ValueError('Invalid default-org-visibility, must be one of public, limited, or private')
+            
 
 
 def random_token(length: int = 43) -> str:
@@ -345,6 +347,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 disable_organizations_page=config.disable_organizations_page,
                 disable_code_page=config.disable_code_page,
                 protocol=protocol,
+                disable_plain_registration=config.disable_plain_registration,
             )
             buf = StringIO()
             cfg.write(buf)
