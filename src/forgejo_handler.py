@@ -19,6 +19,7 @@ def generate_config(
         app_slogan: str = "Beyond coding. We Forge.",
         domain: str = "localhost",
         http_port: int = 3000,
+        ssh_port: int = 22,
         database_info: dict[str, str] = {},
         log_level: str = "info",
         use_port_in_domain: bool = True,
@@ -67,8 +68,16 @@ def generate_config(
         "HTTP_PORT": str(http_port),
         "ROOT_URL": f"{protocol}://{final_domain}/",
         "APP_DATA_PATH": "/data/gitea/data",
+<<<<<<< HEAD
         "DISABLE_SSH": str(disable_ssh).lower(),
         "SSH_PORT": "22",
+=======
+        "DISABLE_SSH": "false",
+        "SSH_PORT": "22", # display port 22 but actually run on port 'ssh_port', because the router and loadbalancer
+                          # infront of forgejo will be listening on port 22 
+        "SSH_LISTEN_PORT": str(ssh_port),
+        "START_SSH_SERVER": "true",
+>>>>>>> 2ec7a35 (Working traefik ssh config)
         "LFS_START_SERVER": "true",
         "LFS_JWT_SECRET": b64decode(secrets["LFS_JWT_SECRET"]).decode(),
         "OFFLINE_MODE": "true",
