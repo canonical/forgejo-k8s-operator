@@ -544,7 +544,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         secret, _ = self.container.exec(cmd.split()).wait_output()
         # register the runner with the generated secret
         register_cmd = (
-          f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini forgejo-cli actions register "
+          f"{shlex.quote(FORGEJO_CLI)} --config={CUSTOM_FORGEJO_CONFIG_FILE} forgejo-cli actions register "
           f"--secret {shlex.quote(secret)} "
           f"--labels {shlex.quote(labels)} "
           f"--name {shlex.quote(name)} "
@@ -565,7 +565,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             event.fail("username, password, and email parameters are required")
             return
         cmd = (
-          f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini admin user create "
+          f"{shlex.quote(FORGEJO_CLI)} --config={CUSTOM_FORGEJO_CONFIG_FILE} admin user create "
           f"--username {shlex.quote(username)} "
           f"--email {shlex.quote(email)} "
           f"--admin "
@@ -586,7 +586,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             event.fail("username parameter is required")
             return
         cmd = (
-          f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini admin user generate-access-token "
+          f"{shlex.quote(FORGEJO_CLI)} --config={CUSTOM_FORGEJO_CONFIG_FILE} admin user generate-access-token "
           f"--username {shlex.quote(username)} "
           f"--token-name {shlex.quote(token_name)} "
           f"--scopes {shlex.quote(scopes)} "
@@ -609,7 +609,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             event.fail("username parameter is required")
             return
         cmd = (
-          f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini admin user change-password "
+          f"{shlex.quote(FORGEJO_CLI)} --config={CUSTOM_FORGEJO_CONFIG_FILE} admin user change-password "
           f"--username {shlex.quote(username)} "
           f"--password {shlex.quote(password)}"
         )
