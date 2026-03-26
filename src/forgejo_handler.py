@@ -28,7 +28,6 @@ def generate_config(
         key_file: str = "",
         openid_whitelisted_uris: str = "",
         disable_ssh: bool = False,
-        disable_registration: bool = False,
         require_signin_view: bool = False,
         default_keep_email_private: bool = True,
         default_allow_create_organization: bool = True,

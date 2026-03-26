@@ -10,7 +10,7 @@ from io import StringIO
 import logging
 import ops
 import re
-from typing import Optional, Literal, cast
+from typing import Optional
 import secrets
 import shlex
 
@@ -32,15 +32,6 @@ SERVICE_NAME = "forgejo"  # Name of Pebble service that runs in the workload con
 FORGEJO_CLI = "/usr/local/bin/forgejo"
 CUSTOM_FORGEJO_CONFIG_DIR = "/etc/forgejo/"
 CUSTOM_FORGEJO_CONFIG_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "config.ini"
-# CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "lfs_jwt_secret"
-# CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "internal_token"
-# CUSTOM_FORGEJO_JWT_SECRET_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "jwt_secret"
-# # map secret file to the secret length
-# CUSTOM_FORGEJO_SECRETS = {
-#     CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE: 43,
-#     CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE: 105,
-#     CUSTOM_FORGEJO_JWT_SECRET_FILE: 43,
-# }
 PORT = 3000
 SSH_PORT = 22222
 FORGEJO_DATA_DIR = "/data"
@@ -58,7 +49,6 @@ class ForgejoConfig:
     domain: str = "forgejo.internal"
     openid_whitelisted_uris: str = ""
     disable_ssh: bool = False
-    disable_registration: bool = False
     require_signin_view: bool = False
     default_keep_email_private: bool = True
     default_allow_create_organization: bool = True
@@ -336,7 +326,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 key_file=self.cert_handler.key_path if tls_ready else "",
                 openid_whitelisted_uris=config.openid_whitelisted_uris,
                 disable_ssh=config.disable_ssh,
-                disable_registration=config.disable_registration,
                 require_signin_view=config.require_signin_view,
                 default_keep_email_private=config.default_keep_email_private,
                 default_allow_create_organization=config.default_allow_create_organization,
@@ -631,6 +620,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             event.fail(f"Failed to reset password: {e.stderr}")
             return
         event.set_results({"output": output.strip()})
+
 
 if __name__ == "__main__":  # pragma: nocover
     ops.main(ForgejoK8SOperatorCharm)
