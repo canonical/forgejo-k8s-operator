@@ -32,7 +32,17 @@ SERVICE_NAME = "forgejo"  # Name of Pebble service that runs in the workload con
 FORGEJO_CLI = "/usr/local/bin/forgejo"
 CUSTOM_FORGEJO_CONFIG_DIR = "/etc/forgejo/"
 CUSTOM_FORGEJO_CONFIG_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "config.ini"
-PORT = 3000  # Forgejo's internal listen port (non-privileged, runs as git user uid 1000)
+# CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "lfs_jwt_secret"
+# CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "internal_token"
+# CUSTOM_FORGEJO_JWT_SECRET_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "jwt_secret"
+# # map secret file to the secret length
+# CUSTOM_FORGEJO_SECRETS = {
+#     CUSTOM_FORGEJO_LFS_JWT_SECRET_FILE: 43,
+#     CUSTOM_FORGEJO_INTERNAL_TOKEN_FILE: 105,
+#     CUSTOM_FORGEJO_JWT_SECRET_FILE: 43,
+# }
+PORT = 3000
+SSH_PORT = 22222
 FORGEJO_DATA_DIR = "/data"
 FORGEJO_SYSTEM_USER_ID = 1000
 FORGEJO_SYSTEM_USER = "git"
@@ -299,6 +309,16 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 self.unit.status = ops.BlockedStatus(f"Can not get forgejo secrets {self.k8s_secrets_name} to start")
                 return
 
+            scheme = self.fetch_ingress_relation_data()
+            protocol = "http"
+            if scheme:
+                scheme = scheme.lower()
+                if scheme not in ["http", "https"]:
+                    logger.warning(f"Got scheme {scheme} from traefik databag, but on http or https is supported, so falling back to http")
+                    protocol = "http"
+                else:
+                    protocol = scheme
+
             # write the config file to the forgejo container's filesystem
             cfg = generate_config(
                 secrets=secrets,
@@ -324,6 +344,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 disable_users_page=config.disable_users_page,
                 disable_organizations_page=config.disable_organizations_page,
                 disable_code_page=config.disable_code_page,
+                protocol=protocol,
             )
             buf = StringIO()
             cfg.write(buf)
@@ -409,6 +430,17 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             }
             return db_data
         return {}
+
+
+    def fetch_ingress_relation_data(self) -> str | None:
+        """Fetch ingress relation data.
+
+        We need to get the scheme from traefik, to know if we are on http or https.
+        """
+        logger.info(f"Ingress object has scheme {self.ingress.scheme}")
+        traefik_route_relation = self.model.get_relation("ingress")
+        if traefik_route_relation:
+            return traefik_route_relation.data[traefik_route_relation.app].get("scheme")
 
 
     def traefik_service_name(self, service_type: str = "http") -> str:

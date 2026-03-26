@@ -39,6 +39,7 @@ def generate_config(
         disable_users_page: bool = False,
         disable_organizations_page: bool = False,
         disable_code_page: bool = False,
+        protocol: str = "http",
 
     ) -> configparser.ConfigParser:
     """Get the running version of the workload."""
@@ -68,16 +69,11 @@ def generate_config(
         "HTTP_PORT": str(http_port),
         "ROOT_URL": f"{protocol}://{final_domain}/",
         "APP_DATA_PATH": "/data/gitea/data",
-<<<<<<< HEAD
         "DISABLE_SSH": str(disable_ssh).lower(),
-        "SSH_PORT": "22",
-=======
-        "DISABLE_SSH": "false",
         "SSH_PORT": "22", # display port 22 but actually run on port 'ssh_port', because the router and loadbalancer
                           # infront of forgejo will be listening on port 22 
         "SSH_LISTEN_PORT": str(ssh_port),
         "START_SSH_SERVER": "true",
->>>>>>> 2ec7a35 (Working traefik ssh config)
         "LFS_START_SERVER": "true",
         "LFS_JWT_SECRET": b64decode(secrets["LFS_JWT_SECRET"]).decode(),
         "OFFLINE_MODE": "true",
@@ -100,24 +96,16 @@ def generate_config(
         "REGISTER_EMAIL_CONFIRM": "false",
         "REGISTER_MANUAL_CONFIRM": "true",
         "ENABLE_NOTIFY_MAIL": "false",
-<<<<<<< HEAD
         "DISABLE_REGISTRATION": str(disable_registration).lower(),
-=======
-        "DISABLE_REGISTRATION": "true",
->>>>>>> 12599d5 (Disable autoregistration)
         "ALLOW_ONLY_EXTERNAL_REGISTRATION": "false",
         "ENABLE_CAPTCHA": "true",
         "REQUIRE_SIGNIN_VIEW": str(require_signin_view).lower(),
         "DEFAULT_KEEP_EMAIL_PRIVATE": str(default_keep_email_private).lower(),
         "DEFAULT_ALLOW_CREATE_ORGANIZATION": str(default_allow_create_organization).lower(),
         "DEFAULT_ENABLE_TIMETRACKING": "true",
-<<<<<<< HEAD
         "NO_REPLY_ADDRESS": "noreply.localhost",
         "DEFAULT_USER_VISIBILITY": default_user_visibility,
         "DEFAULT_ORG_VISIBILITY": default_org_visibility,
-=======
-        "NO_REPLY_ADDRESS": f"noreply.{domain}"
->>>>>>> e3aa30e (Switch secret storage to k8s secrets)
     }
 
     openid_config: dict[str, str] = {
