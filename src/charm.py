@@ -21,7 +21,7 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 
 from certificates import CertHandler
-from forgejo_handler import generate_config
+from forgejo_handler import generate_config, random_token
 
 logger = logging.getLogger(__name__)
 
