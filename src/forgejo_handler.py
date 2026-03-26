@@ -6,17 +6,15 @@
 The intention is that this module could be used outside the context of a charm.
 """
 
+from base64 import b64decode
 import configparser
 import logging
-import secrets
 
 logger = logging.getLogger(__name__)
 
-def random_token(length: int = 43) -> str:
-    return secrets.token_urlsafe(length)[:length]
-
 
 def generate_config(
+        secrets: dict,
         app_name: str = "Forgejo",
         app_slogan: str = "Beyond coding. We Forge.",
         domain: str = "localhost",
@@ -72,6 +70,7 @@ def generate_config(
         "DISABLE_SSH": str(disable_ssh).lower(),
         "SSH_PORT": "22",
         "LFS_START_SERVER": "true",
+        "LFS_JWT_SECRET": b64decode(secrets["LFS_JWT_SECRET"]).decode(),
         "OFFLINE_MODE": "true",
     }
     if tls_enabled and cert_file and key_file:
@@ -98,9 +97,13 @@ def generate_config(
         "DEFAULT_KEEP_EMAIL_PRIVATE": str(default_keep_email_private).lower(),
         "DEFAULT_ALLOW_CREATE_ORGANIZATION": str(default_allow_create_organization).lower(),
         "DEFAULT_ENABLE_TIMETRACKING": "true",
+<<<<<<< HEAD
         "NO_REPLY_ADDRESS": "noreply.localhost",
         "DEFAULT_USER_VISIBILITY": default_user_visibility,
         "DEFAULT_ORG_VISIBILITY": default_org_visibility,
+=======
+        "NO_REPLY_ADDRESS": f"noreply.{domain}"
+>>>>>>> e3aa30e (Switch secret storage to k8s secrets)
     }
 
     openid_config: dict[str, str] = {
@@ -141,13 +144,13 @@ def generate_config(
 
     config["security"] = {
         "INSTALL_LOCK": "true",
-        "INTERNAL_TOKEN": "",
-        # "INTERNAL_TOKEN_URI": f"file:{internal_token}",
+        "INTERNAL_TOKEN": b64decode(secrets["INTERNAL_TOKEN"]).decode(),
         "PASSWORD_HASH_ALGO": "pbkdf2_hi"
     }
 
     config["oauth2"] = {
-        "enabled": "true",
+        "ENABLED": "true",
+        "JWT_SECRET": b64decode(secrets["JWT_SECRET"]).decode(),
     }
 
     config["metrics"] = {
