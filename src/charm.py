@@ -4,12 +4,12 @@
 
 """Forgejo K8s Charm."""
 
+from base64 import b64encode
 import dataclasses
 from io import StringIO
 import logging
 import ops
 import re
-import socket
 from typing import Optional
 import secrets
 import shlex
@@ -19,6 +19,9 @@ from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
+from lightkube import Client
+from lightkube.resources.core_v1 import Secret
+from lightkube.models.meta_v1 import ObjectMeta
 
 from certificates import CertHandler
 from forgejo_handler import generate_config
@@ -29,7 +32,8 @@ SERVICE_NAME = "forgejo"  # Name of Pebble service that runs in the workload con
 FORGEJO_CLI = "/usr/local/bin/forgejo"
 CUSTOM_FORGEJO_CONFIG_DIR = "/etc/forgejo/"
 CUSTOM_FORGEJO_CONFIG_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "config.ini"
-PORT = 3000  # Forgejo's internal listen port (non-privileged, runs as git user uid 1000)
+PORT = 3000
+SSH_PORT = 22222
 FORGEJO_DATA_DIR = "/data"
 FORGEJO_SYSTEM_USER_ID = 1000
 FORGEJO_SYSTEM_USER = "git"
@@ -45,7 +49,6 @@ class ForgejoConfig:
     domain: str = "forgejo.internal"
     openid_whitelisted_uris: str = ""
     disable_ssh: bool = False
-    disable_registration: bool = False
     require_signin_view: bool = False
     default_keep_email_private: bool = True
     default_allow_create_organization: bool = True
@@ -56,16 +59,22 @@ class ForgejoConfig:
     disable_users_page: bool = False
     disable_organizations_page: bool = False
     disable_code_page: bool = False
+    disable_plain_registration: bool = True
 
     def __post_init__(self):
         """Configuration validation."""
         if self.log_level not in ['trace', 'debug', 'info', 'warn', 'error', 'fatal']:
-            raise ValueError('Invalid log level number, should be one of trace, debug, info, warn, error, or fatal')
+            raise ValueError('Invalid log level, should be one of trace, debug, info, warn, error, or fatal')
         _valid_visibility = {'public', 'limited', 'private'}
         if self.default_user_visibility not in _valid_visibility:
             raise ValueError('Invalid default-user-visibility, must be one of public, limited, or private')
         if self.default_org_visibility not in _valid_visibility:
             raise ValueError('Invalid default-org-visibility, must be one of public, limited, or private')
+            
+
+
+def random_token(length: int = 43) -> str:
+    return secrets.token_urlsafe(length)[:length]
 
 
 class ForgejoK8SOperatorCharm(ops.CharmBase):
@@ -73,9 +82,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
     def __init__(self, framework: ops.Framework) -> None:
         super().__init__(framework)
-        self._name = "forgejo"
-        self.container = self.unit.get_container(self._name)
-        self.pebble_service_name = SERVICE_NAME
+        self.reconcile_ports()
 
         self.ingress = TraefikRouteRequirer(
             self, self.model.get_relation("ingress"), "ingress", raw=True
@@ -93,9 +100,10 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             self, relation_name='grafana-dashboard'
         )
 
-        # framework.observe(self.on.install, self._on_install)
+        framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.forgejo_pebble_ready, self.reconcile)
         framework.observe(self.on.config_changed, self._on_config_changed)
+        framework.observe(self.ingress.on.ready, self.reconcile)
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
         framework.observe(getattr(self.on, "data_storage_attached"), self._on_storage_attached)
 
@@ -127,20 +135,13 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         framework.observe(self.database.on.database_created, self.reconcile)
         framework.observe(self.database.on.endpoints_changed, self.reconcile)
 
-        self.set_ports()
+        self._name = "forgejo"
+        self.container = self.unit.get_container(self._name)
+        self.pebble_service_name = SERVICE_NAME
 
 
-    # def _on_install(self, _: ops.InstallEvent):
-    #     for secret_file, length in CUSTOM_FORGEJO_SECRETS.items():
-    #         if not self.container.exists(secret_file):
-    #             self.container.push(
-    #                 secret_file,
-    #                 secrets.token_urlsafe(length)[:length],
-    #                 make_dirs=True,
-    #                 user_id=FORGEJO_SYSTEM_USER_ID,
-    #                 user=FORGEJO_SYSTEM_USER,
-    #                 group_id=FORGEJO_SYSTEM_GROUP_ID
-    #             )
+    def _on_install(self, _: ops.InstallEvent):
+        self.get_or_create_forgejo_secrets()
 
 
     @property
@@ -149,8 +150,39 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
 
     @property
-    def hostname(self) -> str:
-        return socket.getfqdn()
+    def k8s_secrets_name(self):
+        return f"{self.app.name}-secrets"
+
+
+    def get_or_create_forgejo_secrets(self) -> dict | None:
+        """Create one-time Forgejo secrets in Kubernetes."""
+        client = Client()
+
+        try:
+            secret = client.get(Secret, name=self.k8s_secrets_name, namespace=self.model.name)
+            data = secret.data
+            logger.info(f"Secret '{self.k8s_secrets_name}' found. Using existing values.")
+        except Exception as e:
+            if "not found" not in str(e).lower():
+                logger.error(f"Something went wrong when trying to get k8s secret {self.k8s_secrets_name}, got {e}")
+                return
+
+            logger.info(f"K8s secret {self.k8s_secrets_name} not found, creating it...")
+
+            data = {
+                "LFS_JWT_SECRET": b64encode(random_token().encode()).decode(),
+                "INTERNAL_TOKEN": b64encode(random_token(105).encode()).decode(),
+                "JWT_SECRET": b64encode(random_token().encode()).decode(),
+            }
+            secret = Secret(
+                metadata=ObjectMeta(name=self.k8s_secrets_name, namespace=self.model.name),
+                type="Opaque",
+                data=data,
+            )
+            client.create(secret)
+            logger.info(f"Secret '{self.k8s_secrets_name}' created successfully.")
+
+        return data
 
 
     def _on_collect_status(self, event: ops.CollectStatusEvent) -> None:
@@ -232,6 +264,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             logger.error("Cannot (re)start service: service does not (yet) exist.")
             return
         logger.info(f"Restarting service {self.pebble_service_name}")
+        # TODO: consider and test forgejo manager restart for a more graceful approach
         self.container.restart(self.pebble_service_name)
 
 
@@ -258,24 +291,41 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                         f"Config domain {config.domain} is valid, submitting traefik route"
                     )
                     self.ingress.submit_to_traefik(
-                        self.get_traefik_route_configuration(config.domain, tls_ready)
+                        self.get_dynamic_traefik_route_configuration(config.domain),
+                        static=self.get_static_traefik_route_configuration,
                     )
                 else:
-                    logger.error(f"No domain set in charm")
+                    logger.error(f"No domain set in charm, so can not generate ingress route")
+
+            secrets = self.get_or_create_forgejo_secrets()
+            if not secrets:
+                self.unit.status = ops.BlockedStatus(f"Can not get forgejo secrets {self.k8s_secrets_name} to start")
+                return
+
+            scheme = self.fetch_ingress_relation_data()
+            protocol = "http"
+            if scheme:
+                scheme = scheme.lower()
+                if scheme not in ["http", "https"]:
+                    logger.warning(f"Got scheme {scheme} from traefik databag, but only http or https is supported, so falling back to http")
+                    protocol = "http"
+                else:
+                    protocol = scheme
 
             # write the config file to the forgejo container's filesystem
             cfg = generate_config(
+                secrets=secrets,
                 domain=config.domain,
                 log_level=config.log_level,
                 database_info=db_data,
-                use_port_in_domain=False,
                 http_port=PORT,
+                ssh_port=SSH_PORT,
+                use_port_in_domain=False,
                 tls_enabled=tls_ready,
                 cert_file=self.cert_handler.cert_path if tls_ready else "",
                 key_file=self.cert_handler.key_path if tls_ready else "",
                 openid_whitelisted_uris=config.openid_whitelisted_uris,
                 disable_ssh=config.disable_ssh,
-                disable_registration=config.disable_registration,
                 require_signin_view=config.require_signin_view,
                 default_keep_email_private=config.default_keep_email_private,
                 default_allow_create_organization=config.default_allow_create_organization,
@@ -286,6 +336,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 disable_users_page=config.disable_users_page,
                 disable_organizations_page=config.disable_organizations_page,
                 disable_code_page=config.disable_code_page,
+                protocol=protocol,
+                disable_plain_registration=config.disable_plain_registration,
             )
             buf = StringIO()
             cfg.write(buf)
@@ -322,11 +374,13 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             return False
         return self.cert_handler._certificate_is_available()
 
-    def set_ports(self):
+    def reconcile_ports(self):
         """Open necessary (and close no longer needed) workload ports."""
         planned_ports = {
             ops.model.OpenedPort("tcp", PORT),
+            ops.model.OpenedPort("tcp", SSH_PORT),
         }
+
         actual_ports = self.unit.opened_ports()
 
         # Ports may change across an upgrade, so need to sync
@@ -371,66 +425,76 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         return {}
 
 
-    @property
-    def traefik_service_name(self):
-        return f"{self.model.name}-{self.model.app.name}-service"
+    def fetch_ingress_relation_data(self) -> str | None:
+        """Fetch ingress relation data.
 
-
-    def get_traefik_route_configuration(self, domain: str, tls_enabled: bool = False) -> dict:
-        """Configure a route from traefik to forgejo.
-
-        Forgejo always listens on PORT (3000) internally, running as a non-root user.
-        Traefik handles the external 80/443 mapping.
-
-        HTTP mode: standard HTTP router forwarding to Forgejo on port 3000.
-        TLS mode: TCP TLS-passthrough router so Forgejo terminates TLS on port 3000.
+        We need to get the scheme from traefik, to know if we are on http or https.
         """
-        router_name = f"{self.model.name}-{self.model.app.name}-router"
-        # Use the stable Kubernetes service DNS so the address survives pod restarts.
-        k8s_service = f"{self.app.name}.{self.model.name}.svc.cluster.local"
+        logger.info(f"Ingress object has scheme {self.ingress.scheme}")
+        traefik_route_relation = self.model.get_relation("ingress")
+        if traefik_route_relation:
+            return traefik_route_relation.data[traefik_route_relation.app].get("scheme")
 
-        if tls_enabled:
-            # TCP passthrough: Traefik forwards raw TLS bytes; Forgejo terminates TLS.
-            # HostSNI matches on the TLS SNI field, which requires passthrough mode.
-            return {
-                "tcp": {
-                    "routers": {
-                        router_name: {
-                            "rule": f"HostSNI(`{domain}`)",
-                            "service": self.traefik_service_name,
-                            "entryPoints": ["websecure"],
-                            "tls": {"passthrough": True},
-                        }
-                    },
-                    "services": {
-                        self.traefik_service_name: {
-                            "loadBalancer": {
-                                "servers": [{"address": f"{k8s_service}:{PORT}"}],
-                            }
-                        }
-                    },
-                }
-            }
 
-        # HTTP mode
+    def traefik_service_name(self, service_type: str = "http") -> str:
+        return f"{self.model.name}-{self.model.app.name}-{service_type}-service"
+
+
+    def get_dynamic_traefik_route_configuration(self, domain: str) -> dict:
+        """Configure a route from traefik to forgejo."""
         return {
             "http": {
                 "routers": {
-                    router_name: {
-                        "rule": f"Host(`{domain}`)",
-                        "service": self.traefik_service_name,
+                    f"{self.model.name}-{self.app.name}-router": {
+                        "rule": f"Host(`{domain}`)", # "ClientIP(`0.0.0.0/0`)"
+                        "service": self.traefik_service_name(),
                         "entryPoints": ["web"],
                     }
                 },
                 "services": {
-                    self.traefik_service_name: {
+                    self.traefik_service_name(): {
                         "loadBalancer": {
                             "servers": [
                                 {"url": f"http://{k8s_service}:{PORT}"}
                             ]
                         }
                     }
+                }
+            },
+            "tcp": {
+                "routers": {
+                    f"{self.model.name}-{self.app.name}-ssh-router": {
+                        "rule": "HostSNI(`*`)",
+                        "service": self.traefik_service_name("ssh"),
+                        "entryPoints": ["ssh"],
+                    }
                 },
+                "services": {
+                    self.traefik_service_name("ssh"): {
+                        "loadBalancer": {
+                            "servers": [
+                                {"address": f"{self.app.name}.{self.model.name}.svc.cluster.local:{SSH_PORT}"}
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+
+
+    @property
+    def get_static_traefik_route_configuration(self) -> dict:
+        """Only generate static configs for ssh port as port 80 and 443 are generated already.
+
+        Forgejo's config SSH_PORT will display port 22 in the clone url, but it will actually be listening on
+        SSH_LISTEN_PORT. This routing will be:
+          user -> loadBalancer (tcp/22) -> ingress (tcp/22) -> forgejo (tcp/SSH_LISTEN_PORT)
+        """
+        return {
+            "entryPoints": {
+                "ssh": {
+                    "address": ":22"
+                }
             }
         }
 
@@ -480,7 +544,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         secret, _ = self.container.exec(cmd.split()).wait_output()
         # register the runner with the generated secret
         register_cmd = (
-          f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini forgejo-cli actions register "
+          f"{shlex.quote(FORGEJO_CLI)} --config={CUSTOM_FORGEJO_CONFIG_FILE} forgejo-cli actions register "
           f"--secret {shlex.quote(secret)} "
           f"--labels {shlex.quote(labels)} "
           f"--name {shlex.quote(name)} "
@@ -501,7 +565,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             event.fail("username, password, and email parameters are required")
             return
         cmd = (
-          f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini admin user create "
+          f"{shlex.quote(FORGEJO_CLI)} --config={CUSTOM_FORGEJO_CONFIG_FILE} admin user create "
           f"--username {shlex.quote(username)} "
           f"--email {shlex.quote(email)} "
           f"--admin "
@@ -522,7 +586,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             event.fail("username parameter is required")
             return
         cmd = (
-          f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini admin user generate-access-token "
+          f"{shlex.quote(FORGEJO_CLI)} --config={CUSTOM_FORGEJO_CONFIG_FILE} admin user generate-access-token "
           f"--username {shlex.quote(username)} "
           f"--token-name {shlex.quote(token_name)} "
           f"--scopes {shlex.quote(scopes)} "
@@ -545,7 +609,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             event.fail("username parameter is required")
             return
         cmd = (
-          f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini admin user change-password "
+          f"{shlex.quote(FORGEJO_CLI)} --config={CUSTOM_FORGEJO_CONFIG_FILE} admin user change-password "
           f"--username {shlex.quote(username)} "
           f"--password {shlex.quote(password)}"
         )
@@ -556,6 +620,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             event.fail(f"Failed to reset password: {e.stderr}")
             return
         event.set_results({"output": output.strip()})
+
 
 if __name__ == "__main__":  # pragma: nocover
     ops.main(ForgejoK8SOperatorCharm)

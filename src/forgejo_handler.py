@@ -6,20 +6,20 @@
 The intention is that this module could be used outside the context of a charm.
 """
 
+from base64 import b64decode
 import configparser
 import logging
-import secrets
 
 logger = logging.getLogger(__name__)
 
-def random_token(length: int = 43) -> str:
-    return secrets.token_urlsafe(length)[:length]
 
 def generate_config(
+        secrets: dict,
         app_name: str = "Forgejo",
         app_slogan: str = "Beyond coding. We Forge.",
         domain: str = "localhost",
         http_port: int = 3000,
+        ssh_port: int = 22,
         database_info: dict[str, str] = {},
         log_level: str = "info",
         use_port_in_domain: bool = True,
@@ -28,7 +28,6 @@ def generate_config(
         key_file: str = "",
         openid_whitelisted_uris: str = "",
         disable_ssh: bool = False,
-        disable_registration: bool = False,
         require_signin_view: bool = False,
         default_keep_email_private: bool = True,
         default_allow_create_organization: bool = True,
@@ -39,6 +38,8 @@ def generate_config(
         disable_users_page: bool = False,
         disable_organizations_page: bool = False,
         disable_code_page: bool = False,
+        protocol: str = "http",
+        disable_plain_registration: bool = True,
 
     ) -> configparser.ConfigParser:
     """Get the running version of the workload."""
@@ -69,8 +70,12 @@ def generate_config(
         "ROOT_URL": f"{protocol}://{final_domain}/",
         "APP_DATA_PATH": "/data/gitea/data",
         "DISABLE_SSH": str(disable_ssh).lower(),
-        "SSH_PORT": "22",
+        "SSH_PORT": "22", # display port 22 but actually run on port 'ssh_port', because the router and loadbalancer
+                          # infront of forgejo will be listening on port 22 
+        "SSH_LISTEN_PORT": str(ssh_port),
+        "START_SSH_SERVER": "true",
         "LFS_START_SERVER": "true",
+        "LFS_JWT_SECRET": b64decode(secrets["LFS_JWT_SECRET"]).decode(),
         "OFFLINE_MODE": "true",
     }
     if tls_enabled and cert_file and key_file:
@@ -89,8 +94,9 @@ def generate_config(
 
     config["service"] = {
         "REGISTER_EMAIL_CONFIRM": "false",
+        "REGISTER_MANUAL_CONFIRM": "true",
         "ENABLE_NOTIFY_MAIL": "false",
-        "DISABLE_REGISTRATION": str(disable_registration).lower(),
+        "DISABLE_REGISTRATION": str(disable_plain_registration).lower(), # this is only required if you don't want openid login
         "ALLOW_ONLY_EXTERNAL_REGISTRATION": "false",
         "ENABLE_CAPTCHA": "true",
         "REQUIRE_SIGNIN_VIEW": str(require_signin_view).lower(),
@@ -140,13 +146,13 @@ def generate_config(
 
     config["security"] = {
         "INSTALL_LOCK": "true",
-        "INTERNAL_TOKEN": "",
-        # "INTERNAL_TOKEN_URI": f"file:{internal_token}",
+        "INTERNAL_TOKEN": b64decode(secrets["INTERNAL_TOKEN"]).decode(),
         "PASSWORD_HASH_ALGO": "pbkdf2_hi"
     }
 
     config["oauth2"] = {
-        "enabled": "true",
+        "ENABLED": "true",
+        "JWT_SECRET": b64decode(secrets["JWT_SECRET"]).decode(),
     }
 
     config["metrics"] = {
