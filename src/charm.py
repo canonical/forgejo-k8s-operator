@@ -11,7 +11,6 @@ import ops
 import re
 import socket
 from typing import Optional
-import secrets
 import shlex
 
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
