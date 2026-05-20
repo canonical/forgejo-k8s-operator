@@ -16,7 +16,7 @@ requires:
     limit: 1
     optional: false
     description: |
-      Integration to obtain an database backend for Foregjo.
+      Integration to obtain a database backend for Forgejo.
   logging:
     interface: loki_push_api
     optional: true
@@ -28,7 +28,7 @@ requires:
     optional: true
     limit: 1
     description: |
-      Integration to obtain an ingressed address to access Foregjo from outside the model.
+      Integration to obtain an ingressed address to access Forgejo from outside the model.
       Note that you should use subdomain mode in traefik with a custom domain name.
   certificates:
     interface: tls-certificates
@@ -224,7 +224,7 @@ actions:
     params:
       username:
         type: string
-        descriusernameption: Username of the Forgejo user whose password should be reset.
+        description: Username of the Forgejo user whose password should be reset.
       password:
         type: string
         description: New password to be set for the user.
