@@ -474,7 +474,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         scope = params.get("scope", None)
         add_scope = ""
         if scope:
-            add_scope = f"--scope {scope}"
+            add_scope = f"--scope {shlex.quote(scope)}"
         # generate the secret
         cmd = f"{FORGEJO_CLI} forgejo-cli actions generate-secret"
         secret, _ = self.container.exec(cmd.split()).wait_output()
