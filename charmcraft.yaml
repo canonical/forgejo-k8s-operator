@@ -168,6 +168,11 @@ config:
       description: Disable the code explore page.
       default: false
       type: boolean
+    disable-plain-registration:
+      description: |
+        Disabled plain username password registration leaving only openid registration available.
+      default: true
+      type: boolean
 
 assumes:
   - juju >= 3.5
