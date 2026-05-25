@@ -41,7 +41,7 @@ def generate_config(
     if database_info is None:
         database_info = {}
     config = configparser.ConfigParser()
-    config.optionxform = str
+    config.optionxform = str  # type: ignore[assignment]
 
     config["DEFAULT"] = {
         "APP_NAME": app_name,

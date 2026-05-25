@@ -9,7 +9,7 @@ import logging
 import re
 import shlex
 from io import StringIO
-from typing import Optional
+from typing import Optional, cast
 
 import ops
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
@@ -82,8 +82,12 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         self.container = self.unit.get_container(self._name)
         self.pebble_service_name = SERVICE_NAME
 
+        # traefik route requirer handles None relation gracefully
         self.ingress = TraefikRouteRequirer(
-            self, self.model.get_relation("ingress"), "ingress", raw=True
+            self,
+            self.model.get_relation("ingress"),  # type: ignore[arg-type]
+            "ingress",
+            raw=True,
         )
 
         # observability endpoint support
@@ -113,7 +117,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         # TLS certificates support
         self.cert_handler = CertHandler(
             self,
-            common_name=self.model.config.get("domain") or self.app.name,
+            common_name=str(self.model.config.get("domain") or self.app.name),
             events=[self.on.config_changed, self.on.forgejo_pebble_ready],
         )
         framework.observe(
@@ -241,7 +245,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         logger.info(f"Restarting service {self.pebble_service_name}")
         self.container.restart(self.pebble_service_name)
 
-    def reconcile(self, _: ops.HookEvent) -> None:
+    def reconcile(self, _: ops.EventBase) -> None:
         """Reconcile charm state: write config, update Pebble layer, and replan."""
         self.unit.status = ops.MaintenanceStatus("starting workload")
         try:
@@ -479,7 +483,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             add_scope = f"--scope {shlex.quote(scope)}"
         # generate the secret
         cmd = f"{FORGEJO_CLI} forgejo-cli actions generate-secret"
-        secret, _ = self.container.exec(cmd.split()).wait_output()
+        cmd_parts: list[str] = cast(list[str], cmd.split())
+        secret, _ = self.container.exec(cmd_parts).wait_output()
         # register the runner with the generated secret
         register_cmd = (
             f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini"
@@ -544,6 +549,9 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         password = event.params.get("password")
         if not username:
             event.fail("username parameter is required")
+            return
+        if not password:
+            event.fail("password parameter is required")
             return
         cmd = (
             f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini"
