@@ -1,6 +1,10 @@
 venv/
 build/
 *.charm
+# charmcraft build artifacts
+parts/
+prime/
+stage/
 .tox/
 .coverage
 __pycache__/
@@ -9,3 +13,4 @@ __pycache__/
 .vscode/
 *charm.sh
 .venv
+tmp/
