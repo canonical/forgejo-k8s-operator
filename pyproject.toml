@@ -28,7 +28,7 @@ lint.extend-ignore = [
     "D409",
     "D413",
 ]
-extend-exclude = ["__pycache__", "*.egg_info"]
+extend-exclude = ["__pycache__", "*.egg_info", "lib/charms"]
 lint.per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
 
 [tool.ruff.lint.mccabe]
@@ -39,3 +39,4 @@ skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage"
 
 [tool.pyright]
 include = ["src/**.py"]
+extraPaths = ["lib", "src"]
