@@ -8,7 +8,6 @@ import dataclasses
 import logging
 import re
 import shlex
-import socket
 from io import StringIO
 from typing import Optional
 
@@ -143,29 +142,10 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         self.set_ports()
 
 
-    # def _on_install(self, _: ops.InstallEvent):
-    #     for secret_file, length in CUSTOM_FORGEJO_SECRETS.items():
-    #         if not self.container.exists(secret_file):
-    #             self.container.push(
-    #                 secret_file,
-    #                 secrets.token_urlsafe(length)[:length],
-    #                 make_dirs=True,
-    #                 user_id=FORGEJO_SYSTEM_USER_ID,
-    #                 user=FORGEJO_SYSTEM_USER,
-    #                 group_id=FORGEJO_SYSTEM_GROUP_ID
-    #             )
-
-
     @property
     def database_name(self):
         """Return the database name scoped to this model and app."""
         return f"{self.model.name}-{self.app.name}"
-
-
-    @property
-    def hostname(self) -> str:
-        """Return the fully qualified domain name of the current host."""
-        return socket.getfqdn()
 
 
     def _on_collect_status(self, event: ops.CollectStatusEvent) -> None:

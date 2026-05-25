@@ -8,13 +8,9 @@ The intention is that this module could be used outside the context of a charm.
 
 import configparser
 import logging
-import secrets
 
 logger = logging.getLogger(__name__)
 
-def random_token(length: int = 43) -> str:
-    """Generate a cryptographically secure random URL-safe token of the given length."""
-    return secrets.token_urlsafe(length)[:length]
 
 def generate_config(
         app_name: str = "Forgejo",
