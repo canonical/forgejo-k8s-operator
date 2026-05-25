@@ -21,7 +21,7 @@ def generate_config(
         app_slogan: str = "Beyond coding. We Forge.",
         domain: str = "localhost",
         http_port: int = 3000,
-        database_info: dict[str, str] = {},
+        database_info: dict[str, str] | None = None,
         log_level: str = "info",
         use_port_in_domain: bool = True,
         tls_enabled: bool = False,
@@ -43,6 +43,8 @@ def generate_config(
 
     ) -> configparser.ConfigParser:
     """Generate a Forgejo app.ini configuration."""
+    if database_info is None:
+        database_info = {}
     config = configparser.ConfigParser()
     config.optionxform = str
 
