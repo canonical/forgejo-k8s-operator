@@ -41,8 +41,7 @@ def generate_config(
         disable_code_page: bool = False,
 
     ) -> configparser.ConfigParser:
-    """Get the running version of the workload."""
-
+    """Generate a Forgejo app.ini configuration."""
     config = configparser.ConfigParser()
     config.optionxform = str
 

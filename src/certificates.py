@@ -4,9 +4,9 @@
 """TLS certificate handling for the Forgejo K8s charm."""
 
 import logging
-import ops
 from typing import Optional
 
+import ops
 from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
     CertificateRequestAttributes,

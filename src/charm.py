@@ -5,14 +5,14 @@
 """Forgejo K8s Charm."""
 
 import dataclasses
-from io import StringIO
 import logging
-import ops
 import re
-import socket
-from typing import Optional
 import shlex
+import socket
+from io import StringIO
+from typing import Optional
 
+import ops
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
@@ -57,14 +57,21 @@ class ForgejoConfig:
     disable_code_page: bool = False
 
     def __post_init__(self):
-        """Configuration validation."""
+        """Validate configuration values."""
         if self.log_level not in ['trace', 'debug', 'info', 'warn', 'error', 'fatal']:
-            raise ValueError('Invalid log level number, should be one of trace, debug, info, warn, error, or fatal')
+            raise ValueError(
+                'Invalid log level number, should be one of '
+                'trace, debug, info, warn, error, or fatal'
+            )
         _valid_visibility = {'public', 'limited', 'private'}
         if self.default_user_visibility not in _valid_visibility:
-            raise ValueError('Invalid default-user-visibility, must be one of public, limited, or private')
+            raise ValueError(
+                'Invalid default-user-visibility, must be one of public, limited, or private'
+            )
         if self.default_org_visibility not in _valid_visibility:
-            raise ValueError('Invalid default-org-visibility, must be one of public, limited, or private')
+            raise ValueError(
+                'Invalid default-org-visibility, must be one of public, limited, or private'
+            )
 
 
 class ForgejoK8SOperatorCharm(ops.CharmBase):
@@ -111,11 +118,18 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             events=[self.on.config_changed, self.on.forgejo_pebble_ready],
         )
         framework.observe(
-            self.cert_handler.certificates.on.certificate_available, self._on_certificates_available
+            self.cert_handler.certificates.on.certificate_available,
+            self._on_certificates_available,
         )
-        framework.observe(self.on["certificates"].relation_changed, self._on_certificates_available)
-        framework.observe(self.on["certificates"].relation_departed, self._on_certificates_removed)
-        framework.observe(self.on["certificates"].relation_broken, self._on_certificates_removed)
+        framework.observe(
+            self.on["certificates"].relation_changed, self._on_certificates_available
+        )
+        framework.observe(
+            self.on["certificates"].relation_departed, self._on_certificates_removed
+        )
+        framework.observe(
+            self.on["certificates"].relation_broken, self._on_certificates_removed
+        )
 
         # database support
         self.database = DatabaseRequires(
@@ -260,7 +274,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                         self.get_traefik_route_configuration(config.domain, tls_ready)
                     )
                 else:
-                    logger.error(f"No domain set in charm")
+                    logger.error("No domain set in charm")
 
             # write the config file to the forgejo container's filesystem
             cfg = generate_config(
@@ -294,7 +308,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 make_dirs=True,
                 user_id=FORGEJO_SYSTEM_USER_ID,
                 user=FORGEJO_SYSTEM_USER,
-                group_id=FORGEJO_SYSTEM_GROUP_ID
+                group_id=FORGEJO_SYSTEM_GROUP_ID,
+                group=FORGEJO_SYSTEM_GROUP,
             )
 
             self.container.add_layer('forgejo', self._get_pebble_layer(), combine=True)
@@ -308,7 +323,9 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             if version := self._forgejo_version:
                 self.unit.set_workload_version(version)
             else:
-                logger.debug("Cannot set workload version at this time: could not get Forgejo version.")
+                logger.debug(
+                    "Cannot set workload version at this time: could not get Forgejo version."
+                )
         # @TODO: Extend exception handling
         except (ops.pebble.APIError, ops.pebble.ConnectionError) as e:
             logger.info('Unable to connect to Pebble: %s', e)
@@ -460,13 +477,14 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             logger.warning("Could not restart service: %s", e)
 
     def _on_storage_attached(self, _: ops.StorageAttachedEvent) -> None:
-        self.container.exec(["chown", f"{FORGEJO_SYSTEM_USER}:{FORGEJO_SYSTEM_GROUP}", FORGEJO_DATA_DIR])
+        owner = f"{FORGEJO_SYSTEM_USER}:{FORGEJO_SYSTEM_GROUP}"
+        self.container.exec(["chown", owner, FORGEJO_DATA_DIR])
 
 
     def _on_generate_runner_secret(self, event: ops.ActionEvent) -> None:
         """Generate a new runner secret and return it as action output."""
         # SECRET=$(forgejo forgejo-cli actions generate-secret)
-        # forgejo forgejo-cli actions register --secret $SECRET --labels "docker" --labels "machine2"
+        # forgejo forgejo-cli actions register --secret $SECRET --labels "docker"
         params = event.params
         name = params.get("name", "runner")
         labels = params.get("labels", "docker")
@@ -479,11 +497,12 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         secret, _ = self.container.exec(cmd.split()).wait_output()
         # register the runner with the generated secret
         register_cmd = (
-          f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini forgejo-cli actions register "
-          f"--secret {shlex.quote(secret)} "
-          f"--labels {shlex.quote(labels)} "
-          f"--name {shlex.quote(name)} "
-          f"{add_scope}".strip()
+            f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini"
+            f" forgejo-cli actions register "
+            f"--secret {shlex.quote(secret)} "
+            f"--labels {shlex.quote(labels)} "
+            f"--name {shlex.quote(name)} "
+            f"{add_scope}".strip()
         )
         argv = ["su", "git", "-c", register_cmd]
         self.container.exec(argv).wait_output()
@@ -500,11 +519,11 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             event.fail("username, password, and email parameters are required")
             return
         cmd = (
-          f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini admin user create "
-          f"--username {shlex.quote(username)} "
-          f"--email {shlex.quote(email)} "
-          f"--admin "
-          f"--random-password"
+            f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini admin user create "
+            f"--username {shlex.quote(username)} "
+            f"--email {shlex.quote(email)} "
+            f"--admin "
+            f"--random-password"
         )
         argv = ["su", "git", "-c", cmd]
         output, _ = self.container.exec(argv).wait_output()
@@ -521,11 +540,12 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             event.fail("username parameter is required")
             return
         cmd = (
-          f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini admin user generate-access-token "
-          f"--username {shlex.quote(username)} "
-          f"--token-name {shlex.quote(token_name)} "
-          f"--scopes {shlex.quote(scopes)} "
-          f"--raw"
+            f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini"
+            f" admin user generate-access-token "
+            f"--username {shlex.quote(username)} "
+            f"--token-name {shlex.quote(token_name)} "
+            f"--scopes {shlex.quote(scopes)} "
+            f"--raw"
         )
         argv = ["su", "git", "-c", cmd]
         try:
@@ -544,9 +564,10 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             event.fail("username parameter is required")
             return
         cmd = (
-          f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini admin user change-password "
-          f"--username {shlex.quote(username)} "
-          f"--password {shlex.quote(password)}"
+            f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini"
+            f" admin user change-password "
+            f"--username {shlex.quote(username)} "
+            f"--password {shlex.quote(password)}"
         )
         argv = ["su", "git", "-c", cmd]
         try:
