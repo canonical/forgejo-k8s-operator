@@ -41,4 +41,3 @@ traefik-k8s/0*     active    idle   10.1.131.37         Serving at internal
 HTTP/1.1 200 OK
 Date: Tue, 02 Sep 2025 19:40:37 GMT
 ```
-

@@ -8,57 +8,52 @@ The intention is that this module could be used outside the context of a charm.
 
 import configparser
 import logging
-import secrets
 
 logger = logging.getLogger(__name__)
 
-def random_token(length: int = 43) -> str:
-    return secrets.token_urlsafe(length)[:length]
 
 def generate_config(
-        app_name: str = "Forgejo",
-        app_slogan: str = "Beyond coding. We Forge.",
-        domain: str = "localhost",
-        http_port: int = 3000,
-        database_info: dict[str, str] = {},
-        log_level: str = "info",
-        use_port_in_domain: bool = True,
-        tls_enabled: bool = False,
-        cert_file: str = "",
-        key_file: str = "",
-        openid_whitelisted_uris: str = "",
-        disable_ssh: bool = False,
-        disable_registration: bool = False,
-        require_signin_view: bool = False,
-        default_keep_email_private: bool = True,
-        default_allow_create_organization: bool = True,
-        enable_openid_signin: bool = True,
-        enable_openid_signup: bool = True,
-        default_user_visibility: str = "public",
-        default_org_visibility: str = "public",
-        disable_users_page: bool = False,
-        disable_organizations_page: bool = False,
-        disable_code_page: bool = False,
-
-    ) -> configparser.ConfigParser:
-    """Get the running version of the workload."""
-
+    app_name: str = "Forgejo",
+    app_slogan: str = "Beyond coding. We Forge.",
+    domain: str = "localhost",
+    http_port: int = 3000,
+    database_info: dict[str, str] | None = None,
+    log_level: str = "info",
+    use_port_in_domain: bool = True,
+    tls_enabled: bool = False,
+    cert_file: str = "",
+    key_file: str = "",
+    openid_whitelisted_uris: str = "",
+    disable_ssh: bool = False,
+    disable_registration: bool = False,
+    require_signin_view: bool = False,
+    default_keep_email_private: bool = True,
+    default_allow_create_organization: bool = True,
+    enable_openid_signin: bool = True,
+    enable_openid_signup: bool = True,
+    default_user_visibility: str = "public",
+    default_org_visibility: str = "public",
+    disable_users_page: bool = False,
+    disable_organizations_page: bool = False,
+    disable_code_page: bool = False,
+) -> configparser.ConfigParser:
+    """Generate a Forgejo app.ini configuration."""
+    if database_info is None:
+        database_info = {}
     config = configparser.ConfigParser()
-    config.optionxform = str
+    config.optionxform = str  # type: ignore[assignment]
 
     config["DEFAULT"] = {
         "APP_NAME": app_name,
         "APP_SLOGAN": app_slogan,
         "RUN_USER": "git",
         "WORK_PATH": "/data/gitea",
-        "RUN_MODE": "prod"
+        "RUN_MODE": "prod",
     }
 
     config["database"] = database_info
 
-    config["repository"] = {
-        "ROOT": "/data/gitea/data/forgejo-repositories"
-    }
+    config["repository"] = {"ROOT": "/data/gitea/data/forgejo-repositories"}
 
     final_domain = f"{domain}:{http_port}" if use_port_in_domain else domain
     protocol = "https" if tls_enabled else "http"
@@ -79,13 +74,9 @@ def generate_config(
         server_config["KEY_FILE"] = key_file
     config["server"] = server_config
 
-    config["lfs"] = {
-        "PATH": "/data/gitea/data/lfs"
-    }
+    config["lfs"] = {"PATH": "/data/gitea/data/lfs"}
 
-    config["mailer"] = {
-        "ENABLED": "false"
-    }
+    config["mailer"] = {"ENABLED": "false"}
 
     config["service"] = {
         "REGISTER_EMAIL_CONFIRM": "false",
@@ -116,33 +107,21 @@ def generate_config(
         "DISABLE_CODE_PAGE": str(disable_code_page).lower(),
     }
 
-    config["cron.update_checker"] = {
-        "ENABLED": "true"
-    }
+    config["cron.update_checker"] = {"ENABLED": "true"}
 
-    config["session"] = {
-        "PROVIDER": "file"
-    }
+    config["session"] = {"PROVIDER": "file"}
 
-    config["log"] = {
-        "MODE": "console",
-        "LEVEL": log_level,
-        "ROOT_PATH": "/data/gitea/log"
-    }
+    config["log"] = {"MODE": "console", "LEVEL": log_level, "ROOT_PATH": "/data/gitea/log"}
 
-    config["repository.pull-request"] = {
-        "DEFAULT_MERGE_STYLE": "merge"
-    }
+    config["repository.pull-request"] = {"DEFAULT_MERGE_STYLE": "merge"}
 
-    config["repository.signing"] = {
-        "DEFAULT_TRUST_MODEL": "committer"
-    }
+    config["repository.signing"] = {"DEFAULT_TRUST_MODEL": "committer"}
 
     config["security"] = {
         "INSTALL_LOCK": "true",
         "INTERNAL_TOKEN": "",
         # "INTERNAL_TOKEN_URI": f"file:{internal_token}",
-        "PASSWORD_HASH_ALGO": "pbkdf2_hi"
+        "PASSWORD_HASH_ALGO": "pbkdf2_hi",
     }
 
     config["oauth2"] = {
@@ -156,4 +135,3 @@ def generate_config(
     }
 
     return config
-

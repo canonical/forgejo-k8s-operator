@@ -103,7 +103,7 @@ config:
       description: |
         Domain name to use as root url for Forgejo.
 
-        If not specified, the juju aplication name is used. Note that when related to an ingress app like traefik,
+        If not specified, the juju application name is used. Note that when related to an ingress app like traefik,
         the final url has both domains, like <forgejo-charm-config-domain>.<ingress-domain>
       default: "forgejo.internal"
       type: string
@@ -197,7 +197,7 @@ actions:
         description: Username for the new admin user (default is "admin")
       email:
         type: string
-        description: Email is requried
+        description: Email is required
     required:
     - username
     - email

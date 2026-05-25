@@ -4,9 +4,9 @@
 """TLS certificate handling for the Forgejo K8s charm."""
 
 import logging
-import ops
 from typing import Optional
 
+import ops
 from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
     CertificateRequestAttributes,
@@ -42,10 +42,12 @@ class CertHandler:
 
     @property
     def cert_path(self) -> str:
+        """Return the path to the certificate file in the container."""
         return f"{CERTS_DIR_PATH}/{CERTIFICATE_NAME}"
 
     @property
     def key_path(self) -> str:
+        """Return the path to the private key file in the container."""
         return f"{CERTS_DIR_PATH}/{PRIVATE_KEY_NAME}"
 
     def configure_certs(self) -> bool:
@@ -75,9 +77,7 @@ class CertHandler:
         return bool(self.charm.model.relations.get(relation_name))
 
     def _certificate_is_available(self) -> bool:
-        cert, key = self.certificates.get_assigned_certificate(
-            certificate_request=self.csra
-        )
+        cert, key = self.certificates.get_assigned_certificate(certificate_request=self.csra)
         return bool(cert and key)
 
     def _check_and_update_certificate(self) -> bool:

@@ -33,9 +33,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
     # Build and deploy charm from local source folder
     charm = await ops_test.build_charm(local_src)
-    resources = {
-        "forgejo-image": METADATA["resources"]["forgejo-image"]["upstream-source"]
-    }
+    resources = {"forgejo-image": METADATA["resources"]["forgejo-image"]["upstream-source"]}
 
     await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME)
 
