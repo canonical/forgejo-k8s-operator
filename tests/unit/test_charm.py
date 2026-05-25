@@ -6,7 +6,8 @@
 import pytest
 from ops import pebble, testing
 
-from charm import SERVICE_NAME, ForgejoK8SOperatorCharm as CharmForgejoCharm
+from charm import SERVICE_NAME
+from charm import ForgejoK8SOperatorCharm as CharmForgejoCharm
 
 CHECK_NAME = "service-ready"  # Name of Pebble check in the mock workload container.
 
@@ -56,7 +57,9 @@ def test_pebble_ready(monkeypatch: pytest.MonkeyPatch):
         check_infos={check_in},
     )
     state_in = testing.State(containers={container_in})
-    monkeypatch.setattr(CharmForgejoCharm, "_forgejo_version", property(lambda self: mock_get_version()))
+    monkeypatch.setattr(
+        CharmForgejoCharm, "_forgejo_version", property(lambda self: mock_get_version())
+    )
 
     # Act:
     state_out = ctx.run(ctx.on.pebble_ready(container_in), state_in)

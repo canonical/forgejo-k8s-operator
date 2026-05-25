@@ -57,19 +57,19 @@ class ForgejoConfig:
 
     def __post_init__(self):
         """Validate configuration values."""
-        if self.log_level not in ['trace', 'debug', 'info', 'warn', 'error', 'fatal']:
+        if self.log_level not in ["trace", "debug", "info", "warn", "error", "fatal"]:
             raise ValueError(
-                'Invalid log level number, should be one of '
-                'trace, debug, info, warn, error, or fatal'
+                "Invalid log level number, should be one of "
+                "trace, debug, info, warn, error, or fatal"
             )
-        _valid_visibility = {'public', 'limited', 'private'}
+        _valid_visibility = {"public", "limited", "private"}
         if self.default_user_visibility not in _valid_visibility:
             raise ValueError(
-                'Invalid default-user-visibility, must be one of public, limited, or private'
+                "Invalid default-user-visibility, must be one of public, limited, or private"
             )
         if self.default_org_visibility not in _valid_visibility:
             raise ValueError(
-                'Invalid default-org-visibility, must be one of public, limited, or private'
+                "Invalid default-org-visibility, must be one of public, limited, or private"
             )
 
 
@@ -89,13 +89,13 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         # observability endpoint support
         self._prometheus_scraping = MetricsEndpointProvider(
             self,
-            relation_name='metrics-endpoint',
-            jobs=[{'static_configs': [{'targets': [f'*:{PORT}']}]}],
+            relation_name="metrics-endpoint",
+            jobs=[{"static_configs": [{"targets": [f"*:{PORT}"]}]}],
             refresh_event=self.on.config_changed,
         )
-        self._logging = LogForwarder(self, relation_name='logging')
+        self._logging = LogForwarder(self, relation_name="logging")
         self._grafana_dashboards = GrafanaDashboardProvider(
-            self, relation_name='grafana-dashboard'
+            self, relation_name="grafana-dashboard"
         )
 
         # framework.observe(self.on.install, self._on_install)
@@ -123,17 +123,13 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         framework.observe(
             self.on["certificates"].relation_changed, self._on_certificates_available
         )
-        framework.observe(
-            self.on["certificates"].relation_departed, self._on_certificates_removed
-        )
-        framework.observe(
-            self.on["certificates"].relation_broken, self._on_certificates_removed
-        )
+        framework.observe(self.on["certificates"].relation_departed, self._on_certificates_removed)
+        framework.observe(self.on["certificates"].relation_broken, self._on_certificates_removed)
 
         # database support
         self.database = DatabaseRequires(
             self,
-            relation_name='database',
+            relation_name="database",
             database_name=self.database_name,
         )
         framework.observe(self.database.on.database_created, self.reconcile)
@@ -141,12 +137,10 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
         self.set_ports()
 
-
     @property
     def database_name(self):
         """Return the database name scoped to this model and app."""
         return f"{self.model.name}-{self.app.name}"
-
 
     def _on_collect_status(self, event: ops.CollectStatusEvent) -> None:
         """Collect and report the unit status."""
@@ -162,9 +156,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         else:
             event.add_status(ops.ActiveStatus())
 
-    def _collect_config_status(
-        self, event: ops.CollectStatusEvent
-    ) -> Optional["ForgejoConfig"]:
+    def _collect_config_status(self, event: ops.CollectStatusEvent) -> Optional["ForgejoConfig"]:
         """Check charm config validity; return config if valid, None otherwise."""
         config = None
         try:
@@ -172,39 +164,38 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         except ValueError as e:
             event.add_status(ops.BlockedStatus(str(e)))
         if config and not config.domain:
-            event.add_status(ops.BlockedStatus('domain config needs to be set'))
+            event.add_status(ops.BlockedStatus("domain config needs to be set"))
         return config
 
     def _collect_database_status(self, event: ops.CollectStatusEvent) -> None:
         """Check database relation status."""
-        if not self.model.get_relation('database'):
+        if not self.model.get_relation("database"):
             # We need the user to do 'juju integrate'.
-            event.add_status(ops.BlockedStatus('Waiting for database relation'))
+            event.add_status(ops.BlockedStatus("Waiting for database relation"))
         elif not self.database.fetch_relation_data():
             # We need the Forgejo <-> Postgresql relation to finish integrating.
-            event.add_status(ops.WaitingStatus('Waiting for database relation'))
+            event.add_status(ops.WaitingStatus("Waiting for database relation"))
 
     def _collect_ingress_status(self, event: ops.CollectStatusEvent) -> None:
         """Check ingress relation status."""
-        if self.model.get_relation('ingress') and not self.ingress.is_ready():
+        if self.model.get_relation("ingress") and not self.ingress.is_ready():
             # We need the Forgejo <-> Ingress relation to finish integrating.
-            event.add_status(ops.WaitingStatus('Waiting for ingress relation'))
+            event.add_status(ops.WaitingStatus("Waiting for ingress relation"))
 
     def _collect_tls_status(self, event: ops.CollectStatusEvent) -> None:
         """Check TLS certificate status."""
-        if self.model.get_relation('certificates') and not self.cert_handler.configure_certs():
-            event.add_status(ops.WaitingStatus('Waiting for TLS certificate'))
+        if self.model.get_relation("certificates") and not self.cert_handler.configure_certs():
+            event.add_status(ops.WaitingStatus("Waiting for TLS certificate"))
 
     def _collect_service_status(self, event: ops.CollectStatusEvent) -> None:
         """Check Pebble service status."""
         try:
             status = self.container.get_service(self.pebble_service_name)
         except (ops.pebble.APIError, ops.pebble.ConnectionError, ops.ModelError):
-            event.add_status(ops.MaintenanceStatus('Waiting for Pebble in workload container'))
+            event.add_status(ops.MaintenanceStatus("Waiting for Pebble in workload container"))
         else:
             if not status.is_running():
-                event.add_status(ops.MaintenanceStatus('Waiting for Forgejo to start up'))
-
+                event.add_status(ops.MaintenanceStatus("Waiting for Forgejo to start up"))
 
     @property
     def _forgejo_version(self) -> Optional[str]:
@@ -223,26 +214,24 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             return result
         return result.group(1)
 
-
     def _get_pebble_layer(self) -> ops.pebble.Layer:
         """Return the Pebble layer definition for the Forgejo service."""
         pebble_layer: ops.pebble.LayerDict = {
-            'summary': 'Forgejo service',
-            'description': 'pebble config layer for the Forgejo server',
-            'services': {
+            "summary": "Forgejo service",
+            "description": "pebble config layer for the Forgejo server",
+            "services": {
                 self.pebble_service_name: {
-                    'override': 'replace',
-                    'summary': 'Forgejo service',
-                    'command': f"{FORGEJO_CLI} web --config={CUSTOM_FORGEJO_CONFIG_FILE}",
-                    'startup': 'enabled',
-                    'user-id': FORGEJO_SYSTEM_USER_ID,
-                    'group-id': FORGEJO_SYSTEM_GROUP_ID,
+                    "override": "replace",
+                    "summary": "Forgejo service",
+                    "command": f"{FORGEJO_CLI} web --config={CUSTOM_FORGEJO_CONFIG_FILE}",
+                    "startup": "enabled",
+                    "user-id": FORGEJO_SYSTEM_USER_ID,
+                    "group-id": FORGEJO_SYSTEM_GROUP_ID,
                     "working-dir": FORGEJO_DATA_DIR,
                 }
             },
         }
         return ops.pebble.Layer(pebble_layer)
-
 
     def _on_config_changed(self, e: ops.ConfigChangedEvent):
         self.reconcile(e)
@@ -252,14 +241,13 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         logger.info(f"Restarting service {self.pebble_service_name}")
         self.container.restart(self.pebble_service_name)
 
-
     def reconcile(self, _: ops.HookEvent) -> None:
         """Reconcile charm state: write config, update Pebble layer, and replan."""
         self.unit.status = ops.MaintenanceStatus("starting workload")
         try:
             config = self.load_config(ForgejoConfig)
         except ValueError as e:
-            logger.error('Configuration error: %s', e)
+            logger.error("Configuration error: %s", e)
             self.unit.status = ops.BlockedStatus(str(e))
             return
 
@@ -318,7 +306,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 group=FORGEJO_SYSTEM_GROUP,
             )
 
-            self.container.add_layer('forgejo', self._get_pebble_layer(), combine=True)
+            self.container.add_layer("forgejo", self._get_pebble_layer(), combine=True)
             logger.info("Added updated layer 'forgejo' to Pebble plan")
 
             # Tell Pebble to incorporate the changes, including restarting the
@@ -334,13 +322,12 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 )
         # @TODO: Extend exception handling
         except (ops.pebble.APIError, ops.pebble.ConnectionError) as e:
-            logger.info('Unable to connect to Pebble: %s', e)
-
+            logger.info("Unable to connect to Pebble: %s", e)
 
     @property
     def _tls_enabled(self) -> bool:
         """Return True if TLS certificates are provisioned in the relation data."""
-        if not self.model.get_relation('certificates'):
+        if not self.model.get_relation("certificates"):
             return False
         return self.cert_handler._certificate_is_available()
 
@@ -360,7 +347,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         for p in new_ports_to_open:
             self.unit.open_port(p.protocol, p.port)
 
-
     def fetch_postgres_relation_data(self) -> dict[str, str]:
         """Fetch postgres relation data.
 
@@ -372,19 +358,19 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         the program exits with a zero status code.
         """
         relations = self.database.fetch_relation_data()
-        logger.debug('Got following database data: %s', relations)
+        logger.debug("Got following database data: %s", relations)
         for data in relations.values():
             if not data:
                 continue
-            logger.info('New database endpoint is %s', data['endpoints'])
-            host, port = data['endpoints'].split(':')
+            logger.info("New database endpoint is %s", data["endpoints"])
+            host, port = data["endpoints"].split(":")
             db_data = {
                 "DB_TYPE": "postgres",
-                'HOST': host,
-                'PORT': port,
-                'NAME': self.database_name,
-                'USER': data['username'],
-                'PASSWD': data['password'],
+                "HOST": host,
+                "PORT": port,
+                "NAME": self.database_name,
+                "USER": data["username"],
+                "PASSWD": data["password"],
                 "SCHEMA": "",
                 "SSL_MODE": "disable",
                 "LOG_SQL": "false",
@@ -392,12 +378,10 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             return db_data
         return {}
 
-
     @property
     def traefik_service_name(self):
         """Return the Traefik service name scoped to this model and app."""
         return f"{self.model.name}-{self.model.app.name}-service"
-
 
     def get_traefik_route_configuration(self, domain: str, tls_enabled: bool = False) -> dict:
         """Configure a route from traefik to forgejo.
@@ -447,16 +431,11 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 },
                 "services": {
                     self.traefik_service_name: {
-                        "loadBalancer": {
-                            "servers": [
-                                {"url": f"http://{k8s_service}:{PORT}"}
-                            ]
-                        }
+                        "loadBalancer": {"servers": [{"url": f"http://{k8s_service}:{PORT}"}]}
                     }
                 },
             }
         }
-
 
     def _on_certificates_available(self, event: ops.EventBase) -> None:
         """Handle new/updated TLS certificate - switch Forgejo to HTTPS."""
@@ -487,7 +466,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         owner = f"{FORGEJO_SYSTEM_USER}:{FORGEJO_SYSTEM_GROUP}"
         self.container.exec(["chown", owner, FORGEJO_DATA_DIR])
 
-
     def _on_generate_runner_secret(self, event: ops.ActionEvent) -> None:
         """Generate a new runner secret and return it as action output."""
         # SECRET=$(forgejo forgejo-cli actions generate-secret)
@@ -516,7 +494,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         # send the secret back as action output
         event.set_results({"runner-secret": secret})
 
-
     def _on_create_admin_user(self, event: ops.ActionEvent) -> None:
         """Create an admin user in Forgejo."""
         params = event.params
@@ -535,7 +512,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         argv = ["su", "git", "-c", cmd]
         output, _ = self.container.exec(argv).wait_output()
         event.set_results({"output": output})
-
 
     def _on_generate_user_token(self, event: ops.ActionEvent) -> None:
         """Generate an API access token for the specified Forgejo user."""
@@ -562,7 +538,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             return
         event.set_results({"token": output.strip()})
 
-
     def _on_reset_user_password(self, event: ops.ActionEvent) -> None:
         """Reset a Forgejo user's password to a new random value."""
         username = event.params.get("username")
@@ -583,6 +558,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             event.fail(f"Failed to reset password: {e.stderr}")
             return
         event.set_results({"output": output.strip()})
+
 
 if __name__ == "__main__":  # pragma: nocover
     ops.main(ForgejoK8SOperatorCharm)

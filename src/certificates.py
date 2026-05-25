@@ -77,9 +77,7 @@ class CertHandler:
         return bool(self.charm.model.relations.get(relation_name))
 
     def _certificate_is_available(self) -> bool:
-        cert, key = self.certificates.get_assigned_certificate(
-            certificate_request=self.csra
-        )
+        cert, key = self.certificates.get_assigned_certificate(certificate_request=self.csra)
         return bool(cert and key)
 
     def _check_and_update_certificate(self) -> bool:
