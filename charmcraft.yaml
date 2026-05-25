@@ -38,6 +38,14 @@ requires:
       Integration to obtain a TLS certificate for Forgejo.
       When related, Forgejo will be configured to serve over HTTPS on port 443.
       When removed, Forgejo will revert to HTTP on port 80.
+  s3-credentials:
+    interface: s3
+    limit: 1
+    optional: true
+    description: |
+      Integration to obtain S3-compatible storage credentials for Forgejo.
+      When related, Forgejo will use S3 for attachments, LFS, avatars, repo-avatars,
+      repo-archive, packages, and actions storage backends.
 
 provides:
   metrics-endpoint:
@@ -59,6 +67,8 @@ charm-libs:
   - lib: prometheus_k8s.prometheus_scrape
     version: "0"
   - lib: traefik_k8s.traefik_route
+    version: "0"
+  - lib: data_platform_libs.s3
     version: "0"
   - lib: tls_certificates_interface.tls_certificates
     version: "4"

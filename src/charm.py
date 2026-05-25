@@ -13,6 +13,7 @@ from typing import Optional, cast
 
 import ops
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
+from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
@@ -138,6 +139,11 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         )
         framework.observe(self.database.on.database_created, self.reconcile)
         framework.observe(self.database.on.endpoints_changed, self.reconcile)
+
+        # S3 storage support
+        self.s3_client = S3Requirer(self, relation_name="s3-credentials", bucket_name="forgejo")
+        framework.observe(self.s3_client.on.credentials_changed, self.reconcile)
+        framework.observe(self.s3_client.on.credentials_gone, self.reconcile)
 
         self.set_ports()
 
@@ -279,6 +285,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 domain=config.domain,
                 log_level=config.log_level,
                 database_info=db_data,
+                s3_info=self._fetch_s3_relation_data(),
                 use_port_in_domain=False,
                 http_port=PORT,
                 tls_enabled=tls_ready,
@@ -381,6 +388,15 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             }
             return db_data
         return {}
+
+    def _fetch_s3_relation_data(self) -> dict[str, str]:
+        """Fetch S3 connection info from the s3-credentials relation."""
+        if not self.model.get_relation("s3-credentials"):
+            return {}
+        s3_info = self.s3_client.get_s3_connection_info()
+        if not s3_info:
+            return {}
+        return s3_info
 
     @property
     def traefik_service_name(self):
