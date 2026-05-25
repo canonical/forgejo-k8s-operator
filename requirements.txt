@@ -1,1 +1,3 @@
 ops ~= 2.17
+cosl
+cryptography
