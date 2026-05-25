@@ -6,7 +6,7 @@
 import pytest
 from ops import pebble, testing
 
-from charm import SERVICE_NAME, CharmForgejoCharm
+from charm import SERVICE_NAME, ForgejoK8SOperatorCharm as CharmForgejoCharm
 
 CHECK_NAME = "service-ready"  # Name of Pebble check in the mock workload container.
 
@@ -49,14 +49,14 @@ def test_pebble_ready(monkeypatch: pytest.MonkeyPatch):
         status=pebble.CheckStatus.UP,  # Simulate the Pebble check passing.
     )
     container_in = testing.Container(
-        "some-container",
+        "forgejo",
         can_connect=True,
         layers={"base": layer},
         service_statuses={SERVICE_NAME: pebble.ServiceStatus.INACTIVE},
         check_infos={check_in},
     )
     state_in = testing.State(containers={container_in})
-    monkeypatch.setattr("charm.charm_forgejo.get_version", mock_get_version)
+    monkeypatch.setattr(CharmForgejoCharm, "_forgejo_version", property(lambda self: mock_get_version()))
 
     # Act:
     state_out = ctx.run(ctx.on.pebble_ready(container_in), state_in)
@@ -65,7 +65,9 @@ def test_pebble_ready(monkeypatch: pytest.MonkeyPatch):
     container_out = state_out.get_container(container_in.name)
     assert container_out.service_statuses[SERVICE_NAME] == pebble.ServiceStatus.ACTIVE
     assert state_out.workload_version is not None
-    assert state_out.unit_status == testing.ActiveStatus()
+    # The charm requires a database relation to reach ActiveStatus; without it
+    # collect-status reports BlockedStatus, which is correct charm behaviour.
+    assert state_out.unit_status == testing.BlockedStatus("Waiting for database relation")
 
 
 def test_pebble_ready_service_not_ready():
@@ -78,7 +80,7 @@ def test_pebble_ready_service_not_ready():
         status=pebble.CheckStatus.DOWN,  # Simulate the Pebble check failing.
     )
     container_in = testing.Container(
-        "some-container",
+        "forgejo",
         can_connect=True,
         layers={"base": layer},
         service_statuses={SERVICE_NAME: pebble.ServiceStatus.INACTIVE},
