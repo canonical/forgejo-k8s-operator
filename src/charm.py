@@ -169,25 +169,54 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
 
     def _on_collect_status(self, event: ops.CollectStatusEvent) -> None:
+        """Collect and report the unit status."""
+        config = self._collect_config_status(event)
+        self._collect_database_status(event)
+        self._collect_ingress_status(event)
+        self._collect_tls_status(event)
+        self._collect_service_status(event)
+        # If nothing is wrong, report active.
+        if config:
+            scheme = "https" if self._tls_enabled else "http"
+            event.add_status(ops.ActiveStatus(f"Serving at {scheme}://{config.domain}"))
+        else:
+            event.add_status(ops.ActiveStatus())
+
+    def _collect_config_status(
+        self, event: ops.CollectStatusEvent
+    ) -> Optional["ForgejoConfig"]:
+        """Check charm config validity; return config if valid, None otherwise."""
         config = None
         try:
             config = self.load_config(ForgejoConfig)
         except ValueError as e:
             event.add_status(ops.BlockedStatus(str(e)))
-        if config:
-            if not config.domain:
-                event.add_status(ops.BlockedStatus('domain config needs to be set'))
+        if config and not config.domain:
+            event.add_status(ops.BlockedStatus('domain config needs to be set'))
+        return config
+
+    def _collect_database_status(self, event: ops.CollectStatusEvent) -> None:
+        """Check database relation status."""
         if not self.model.get_relation('database'):
             # We need the user to do 'juju integrate'.
             event.add_status(ops.BlockedStatus('Waiting for database relation'))
         elif not self.database.fetch_relation_data():
             # We need the Forgejo <-> Postgresql relation to finish integrating.
             event.add_status(ops.WaitingStatus('Waiting for database relation'))
+
+    def _collect_ingress_status(self, event: ops.CollectStatusEvent) -> None:
+        """Check ingress relation status."""
         if self.model.get_relation('ingress') and not self.ingress.is_ready():
             # We need the Forgejo <-> Ingress relation to finish integrating.
             event.add_status(ops.WaitingStatus('Waiting for ingress relation'))
+
+    def _collect_tls_status(self, event: ops.CollectStatusEvent) -> None:
+        """Check TLS certificate status."""
         if self.model.get_relation('certificates') and not self.cert_handler.configure_certs():
             event.add_status(ops.WaitingStatus('Waiting for TLS certificate'))
+
+    def _collect_service_status(self, event: ops.CollectStatusEvent) -> None:
+        """Check Pebble service status."""
         try:
             status = self.container.get_service(self.pebble_service_name)
         except (ops.pebble.APIError, ops.pebble.ConnectionError, ops.ModelError):
@@ -195,12 +224,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         else:
             if not status.is_running():
                 event.add_status(ops.MaintenanceStatus('Waiting for Forgejo to start up'))
-        # If nothing is wrong, then the status is active.
-        if config:
-            scheme = "https" if self._tls_enabled else "http"
-            event.add_status(ops.ActiveStatus(f"Serving at {scheme}://{config.domain}"))
-        else:
-            event.add_status(ops.ActiveStatus())
 
 
     @property
