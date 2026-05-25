@@ -42,10 +42,12 @@ class CertHandler:
 
     @property
     def cert_path(self) -> str:
+        """Return the path to the certificate file in the container."""
         return f"{CERTS_DIR_PATH}/{CERTIFICATE_NAME}"
 
     @property
     def key_path(self) -> str:
+        """Return the path to the private key file in the container."""
         return f"{CERTS_DIR_PATH}/{PRIVATE_KEY_NAME}"
 
     def configure_certs(self) -> bool:

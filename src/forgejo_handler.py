@@ -13,6 +13,7 @@ import secrets
 logger = logging.getLogger(__name__)
 
 def random_token(length: int = 43) -> str:
+    """Generate a cryptographically secure random URL-safe token of the given length."""
     return secrets.token_urlsafe(length)[:length]
 
 def generate_config(

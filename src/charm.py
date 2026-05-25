@@ -158,11 +158,13 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
     @property
     def database_name(self):
+        """Return the database name scoped to this model and app."""
         return f"{self.model.name}-{self.app.name}"
 
 
     @property
     def hostname(self) -> str:
+        """Return the fully qualified domain name of the current host."""
         return socket.getfqdn()
 
 
@@ -220,7 +222,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
 
     def _get_pebble_layer(self) -> ops.pebble.Layer:
-        """A Pebble layer for the Forgejo service."""
+        """Return the Pebble layer definition for the Forgejo service."""
         pebble_layer: ops.pebble.LayerDict = {
             'summary': 'Forgejo service',
             'description': 'pebble config layer for the Forgejo server',
@@ -249,6 +251,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
 
     def reconcile(self, _: ops.HookEvent) -> None:
+        """Reconcile charm state: write config, update Pebble layer, and replan."""
         self.unit.status = ops.MaintenanceStatus("starting workload")
         try:
             config = self.load_config(ForgejoConfig)
@@ -389,6 +392,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
     @property
     def traefik_service_name(self):
+        """Return the Traefik service name scoped to this model and app."""
         return f"{self.model.name}-{self.model.app.name}-service"
 
 
