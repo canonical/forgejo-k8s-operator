@@ -167,7 +167,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         elif not self.database.fetch_relation_data():
             # We need the Forgejo <-> Postgresql relation to finish integrating.
             event.add_status(ops.WaitingStatus('Waiting for database relation'))
-        if not self.ingress.is_ready():
+        if self.model.get_relation('ingress') and not self.ingress.is_ready():
             # We need the Forgejo <-> Ingress relation to finish integrating.
             event.add_status(ops.WaitingStatus('Waiting for ingress relation'))
         if self.model.get_relation('certificates') and not self.cert_handler.configure_certs():
