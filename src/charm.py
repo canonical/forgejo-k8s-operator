@@ -188,7 +188,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
     def _collect_tls_status(self, event: ops.CollectStatusEvent) -> None:
         """Check TLS certificate status."""
-        if self.model.get_relation("certificates") and not self.cert_handler.configure_certs():
+        if self.model.get_relation("certificates") and not self._tls_enabled:
             event.add_status(ops.WaitingStatus("Waiting for TLS certificate"))
 
     def _collect_service_status(self, event: ops.CollectStatusEvent) -> None:
