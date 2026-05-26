@@ -70,7 +70,7 @@ def test_pebble_ready(monkeypatch: pytest.MonkeyPatch):
     assert state_out.workload_version is not None
     # The charm requires a database relation to reach ActiveStatus; without it
     # collect-status reports BlockedStatus, which is correct charm behaviour.
-    assert state_out.unit_status == testing.BlockedStatus("Waiting for database relation")
+    assert state_out.unit_status == testing.BlockedStatus("Add a database relation")
 
 
 def test_pebble_ready_service_not_ready():

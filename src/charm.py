@@ -175,7 +175,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         """Check database relation status."""
         if not self.model.get_relation("database"):
             # We need the user to do 'juju integrate'.
-            event.add_status(ops.BlockedStatus("Waiting for database relation"))
+            event.add_status(ops.BlockedStatus("Add a database relation"))
         elif not self.database.fetch_relation_data():
             # We need the Forgejo <-> Postgresql relation to finish integrating.
             event.add_status(ops.WaitingStatus("Waiting for database relation"))
