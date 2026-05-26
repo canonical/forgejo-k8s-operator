@@ -248,6 +248,11 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
     def reconcile(self, _: ops.EventBase) -> None:
         """Reconcile charm state: write config, update Pebble layer, and replan."""
         self.unit.status = ops.MaintenanceStatus("starting workload")
+        if not self.container.can_connect():
+            logger.info("Pebble not ready yet, deferring reconcile")
+            return
+
+        logger.info("Reconciling workload state")
         try:
             config = self.load_config(ForgejoConfig)
         except ValueError as e:
