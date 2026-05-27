@@ -5,8 +5,7 @@ from typing import cast
 
 import ops
 
-FORGEJO_CLI = "/usr/local/bin/forgejo"
-FORGEJO_CONFIG_FILE = "/etc/forgejo/config.ini"
+from constants import CUSTOM_FORGEJO_CONFIG_FILE, FORGEJO_CLI
 
 
 def _exec_as_git(container: ops.Container, cmd: str) -> str:
@@ -31,7 +30,7 @@ def on_generate_runner_secret(event: ops.ActionEvent, container: ops.Container) 
 
     # Register the runner with the generated secret
     register_cmd = (
-        f"{shlex.quote(FORGEJO_CLI)} --config={FORGEJO_CONFIG_FILE}"
+        f"{shlex.quote(FORGEJO_CLI)} --config={CUSTOM_FORGEJO_CONFIG_FILE}"
         f" forgejo-cli actions register"
         f" --secret {shlex.quote(secret)}"
         f" --labels {shlex.quote(labels)}"
@@ -53,7 +52,7 @@ def on_create_admin_user(event: ops.ActionEvent, container: ops.Container) -> No
         return
 
     cmd = (
-        f"{shlex.quote(FORGEJO_CLI)} --config={FORGEJO_CONFIG_FILE} admin user create"
+        f"{shlex.quote(FORGEJO_CLI)} --config={CUSTOM_FORGEJO_CONFIG_FILE} admin user create"
         f" --username {shlex.quote(username)}"
         f" --email {shlex.quote(email)}"
         f" --admin"
@@ -73,7 +72,7 @@ def on_generate_user_token(event: ops.ActionEvent, container: ops.Container) -> 
         return
 
     cmd = (
-        f"{shlex.quote(FORGEJO_CLI)} --config={FORGEJO_CONFIG_FILE}"
+        f"{shlex.quote(FORGEJO_CLI)} --config={CUSTOM_FORGEJO_CONFIG_FILE}"
         f" admin user generate-access-token"
         f" --username {shlex.quote(username)}"
         f" --token-name {shlex.quote(token_name)}"
@@ -100,7 +99,7 @@ def on_reset_user_password(event: ops.ActionEvent, container: ops.Container) -> 
         return
 
     cmd = (
-        f"{shlex.quote(FORGEJO_CLI)} --config={FORGEJO_CONFIG_FILE}"
+        f"{shlex.quote(FORGEJO_CLI)} --config={CUSTOM_FORGEJO_CONFIG_FILE}"
         f" admin user change-password"
         f" --username {shlex.quote(username)}"
         f" --password {shlex.quote(password)}"
