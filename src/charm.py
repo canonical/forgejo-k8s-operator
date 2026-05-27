@@ -175,7 +175,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         """Check database relation status."""
         if not self.model.get_relation("database"):
             # We need the user to do 'juju integrate'.
-            event.add_status(ops.BlockedStatus("Waiting for database relation"))
+            event.add_status(ops.BlockedStatus("Add a database relation"))
         elif not self.database.fetch_relation_data():
             # We need the Forgejo <-> Postgresql relation to finish integrating.
             event.add_status(ops.WaitingStatus("Waiting for database relation"))
@@ -188,7 +188,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
     def _collect_tls_status(self, event: ops.CollectStatusEvent) -> None:
         """Check TLS certificate status."""
-        if self.model.get_relation("certificates") and not self.cert_handler.configure_certs():
+        if self.model.get_relation("certificates") and not self._tls_enabled:
             event.add_status(ops.WaitingStatus("Waiting for TLS certificate"))
 
     def _collect_service_status(self, event: ops.CollectStatusEvent) -> None:
@@ -247,12 +247,15 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
     def reconcile(self, _: ops.EventBase) -> None:
         """Reconcile charm state: write config, update Pebble layer, and replan."""
-        self.unit.status = ops.MaintenanceStatus("starting workload")
+        if not self.container.can_connect():
+            logger.info("Pebble not ready yet, deferring reconcile")
+            return
+
+        logger.info("Reconciling workload state")
         try:
             config = self.load_config(ForgejoConfig)
         except ValueError as e:
             logger.error("Configuration error: %s", e)
-            self.unit.status = ops.BlockedStatus(str(e))
             return
 
         try:
