@@ -3,6 +3,7 @@
 #
 # To learn more about testing, see https://ops.readthedocs.io/en/latest/explanation/testing.html
 
+
 import pytest
 from ops import pebble, testing
 
@@ -94,3 +95,32 @@ def test_pebble_ready_service_not_ready():
     # Act & assert:
     with pytest.raises(testing.errors.UncaughtCharmError):
         ctx.run(ctx.on.pebble_ready(container_in), state_in)
+
+
+def test_config_propagates_to_env_vars(monkeypatch: pytest.MonkeyPatch):
+    """Test that Juju config values are mapped to env vars and ini file."""
+    ctx = testing.Context(CharmForgejoCharm)
+    container_in = testing.Container(
+        "forgejo",
+        can_connect=True,
+        layers={"base": layer},
+        service_statuses={SERVICE_NAME: pebble.ServiceStatus.INACTIVE},
+    )
+    state_in = testing.State(
+        containers={container_in},
+        config={
+            "forgejo__log__level": "Debug",
+            "forgejo__repository__pull_request__default_merge_style": "rebase",
+        },
+    )
+    monkeypatch.setattr(
+        CharmForgejoCharm, "_forgejo_version", property(lambda self: mock_get_version())
+    )
+
+    state_out = ctx.run(ctx.on.config_changed(), state_in)
+    # Assert: env vars appear in Pebble plan
+    env = state_out.get_container("forgejo").plan.services[SERVICE_NAME].environment
+    # Standard mapping
+    assert env.get("FORGEJO__LOG__LEVEL") == "Debug"
+    # Override mapping: dot in Forgejo section name encoded as _0X2E_
+    assert env.get("FORGEJO__REPOSITORY_0X2E_PULL-REQUEST__DEFAULT_MERGE_STYLE") == "rebase"
