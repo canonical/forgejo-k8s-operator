@@ -144,6 +144,22 @@ config:
       description: Allow users to create organizations by default.
       default: true
       type: boolean
+    forgejo__admin__disable_regular_org_creation:
+      description: Disallow non-admin users from creating organizations.
+      default: false
+      type: boolean
+    forgejo__admin__user_disabled_features:
+      description: |
+        Disabled features for users, could be deletion, manage_ssh_keys, manage_gpg_keys, manage_password
+      default: ""
+      type: string
+    forgejo__admin__external_user_disabled_features:
+      description: |
+        Disabled features for users, could be deletion, manage_ssh_keys, manage_gpg_keys, manage_password
+
+        This applies onlyonly  to users authenticated via OpenID or OAuth2.
+      default: ""
+      type: string
     forgejo__openid__enable_openid_signin:
       description: Enable sign-in via OpenID.
       default: true
@@ -271,6 +287,11 @@ config:
         Acceptable values are "file", "db", or "memory".
       default: "file"
       type: string
+    forgejo__session__domain:
+      description: |
+        Sets the cookie Domain.
+      default: ""
+      type: string
     forgejo__log__mode:
       description: Logging output mode (e.g. "console", "file").
       default: "console"
@@ -324,6 +345,29 @@ config:
         Acceptable values are "merge", "rebase", "rebase-merge", "squash" or "fast-forward-only".
       default: "merge"
       type: string
+    forgejo____run-user:
+      description: System user that Forgejo runs as inside the container.
+      default: "git"
+      type: string
+    forgejo__repository__root:
+      description: Absolute path where Forgejo stores its Git repositories.
+      default: "/data/gitea/data/forgejo-repositories"
+      type: string
+    forgejo__migrations__allowed_domains:
+      description: |
+        Comma-separated allowlist for migrating repositories.
+
+        Leave empty to allow all domains. Wildcard is supported.
+      default: ""
+      type: string
+    forgejo__packages__enabled:
+      description: Enable the built-in package registry.
+      default: true
+      type: boolean
+    forgejo__other__show_footer_version:
+      description: Show Forgejo and Go version information in the footer.
+      default: true
+      type: boolean
 
 assumes:
   - juju >= 3.5
