@@ -221,7 +221,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         domain: str,
         protocol: str,
         tls_ready: bool,
-        db_data: dict,
     ) -> dict:
         """Build the additional env vars dict for environment-to-ini.
 
@@ -234,7 +233,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             "FORGEJO____RUN_USER": "git",
             # Repository root
             "FORGEJO__REPOSITORY__ROOT": "/data/gitea/data/forgejo-repositories",
-            **db_data,
+            **self._fetch_postgres_relation_data(),
+            **self._fetch_s3_relation_data(),
         }
         # SSH_DOMAIN and ROOT_URL are computed from protocol+domain unless the user
         # has explicitly set them via Juju config (empty string = use computed value).
@@ -264,15 +264,13 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             return
 
         try:
-            db_data = self.fetch_postgres_relation_data()
             tls_ready = self.cert_handler.configure_certs()
             domain = config.forgejo__server__domain
             protocol = "https" if tls_ready else "http"
 
             self._configure_ingress(domain, tls_ready)
 
-            additional_env = self._build_additional_env(domain, protocol, tls_ready, db_data)
-
+            additional_env = self._build_additional_env(domain, protocol, tls_ready)
             env_vars = map_config_to_env_vars(self, **additional_env)
             self._apply_pebble_layer(env_vars)
 
@@ -330,7 +328,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         for p in new_ports_to_open:
             self.unit.open_port(p.protocol, p.port)
 
-    def fetch_postgres_relation_data(self) -> dict[str, str]:
+    def _fetch_postgres_relation_data(self) -> dict[str, str]:
         """Fetch postgres relation data.
 
         This function retrieves relation data from a postgres database using
@@ -361,6 +359,23 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             }
             return db_data
         return {}
+
+    def _fetch_s3_relation_data(self) -> dict[str, str]:
+        """Fetch S3 connection info from the s3-credentials relation."""
+        if not self.model.get_relation("s3-credentials"):
+            return {}
+        s3_info = self.s3_client.get_s3_connection_info()
+        if not s3_info:
+            return {}
+        return {
+            "FORGEJO__STORAGE__STORAGE_TYPE": "minio",
+            "FORGEJO__STORAGE__MINIO_ENDPOINT": s3_info.get("endpoint", ""),
+            "FORGEJO__STORAGE__MINIO_ACCESS_KEY_ID": s3_info.get("access-key", ""),
+            "FORGEJO__STORAGE__MINIO_SECRET_ACCESS_KEY": s3_info.get("secret-key", ""),
+            "FORGEJO__STORAGE__MINIO_BUCKET": s3_info.get("bucket", "forgejo"),
+            "FORGEJO__STORAGE__MINIO_LOCATION": s3_info.get("region", ""),
+            "FORGEJO__STORAGE__MINIO_USE_SSL": "true",
+        }
 
     def _on_certificates_available(self, event: ops.EventBase) -> None:
         """Handle new/updated TLS certificate - switch Forgejo to HTTPS."""
