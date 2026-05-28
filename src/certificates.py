@@ -16,9 +16,16 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     TLSCertificatesRequiresV4,
 )
 
+from constants import (
+    CUSTOM_FORGEJO_CONFIG_DIR,
+    FORGEJO_SYSTEM_GROUP,
+    FORGEJO_SYSTEM_GROUP_ID,
+    FORGEJO_SYSTEM_USER,
+    FORGEJO_SYSTEM_USER_ID,
+)
+
 logger = logging.getLogger(__name__)
 
-CERTS_DIR_PATH = "/etc/forgejo"
 PRIVATE_KEY_NAME = "forgejo.key"
 CERTIFICATE_NAME = "forgejo.pem"
 
@@ -43,12 +50,12 @@ class CertHandler:
     @property
     def cert_path(self) -> str:
         """Return the path to the certificate file in the container."""
-        return f"{CERTS_DIR_PATH}/{CERTIFICATE_NAME}"
+        return f"{CUSTOM_FORGEJO_CONFIG_DIR}{CERTIFICATE_NAME}"
 
     @property
     def key_path(self) -> str:
         """Return the path to the private key file in the container."""
-        return f"{CERTS_DIR_PATH}/{PRIVATE_KEY_NAME}"
+        return f"{CUSTOM_FORGEJO_CONFIG_DIR}{PRIVATE_KEY_NAME}"
 
     def configure_certs(self) -> bool:
         """Write certificate and private key to the container if available.
@@ -132,10 +139,10 @@ class CertHandler:
             path=self.cert_path,
             source=self._concat_chain(certificate.chain),
             make_dirs=True,
-            user_id=1000,
-            user="git",
-            group_id=1000,
-            group="git",
+            user_id=FORGEJO_SYSTEM_USER_ID,
+            user=FORGEJO_SYSTEM_USER,
+            group_id=FORGEJO_SYSTEM_GROUP_ID,
+            group=FORGEJO_SYSTEM_GROUP,
         )
         logger.info("Pushed certificate to workload")
 
@@ -144,10 +151,10 @@ class CertHandler:
             path=self.key_path,
             source=str(private_key),
             make_dirs=True,
-            user_id=1000,
-            user="git",
-            group_id=1000,
-            group="git",
+            user_id=FORGEJO_SYSTEM_USER_ID,
+            user=FORGEJO_SYSTEM_USER,
+            group_id=FORGEJO_SYSTEM_GROUP_ID,
+            group=FORGEJO_SYSTEM_GROUP,
         )
         logger.info("Pushed private key to workload")
 

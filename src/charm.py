@@ -6,8 +6,7 @@
 
 import logging
 import re
-import shlex
-from typing import Optional, cast
+from typing import Optional
 
 import ops
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
@@ -17,22 +16,29 @@ from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 
+from actions import (
+    on_create_admin_user,
+    on_generate_runner_secret,
+    on_generate_user_token,
+    on_reset_user_password,
+)
 from certificates import CertHandler
 from config import ForgejoConfig, map_config_to_env_vars
+from constants import (
+    CUSTOM_FORGEJO_CONFIG_FILE,
+    ENVIRONMENT_TO_INI,
+    FORGEJO_CLI,
+    FORGEJO_DATA_DIR,
+    FORGEJO_SYSTEM_GROUP,
+    FORGEJO_SYSTEM_GROUP_ID,
+    FORGEJO_SYSTEM_USER,
+    FORGEJO_SYSTEM_USER_ID,
+    PORT,
+    SERVICE_NAME,
+)
+from ingress import get_traefik_route_config
 
 logger = logging.getLogger(__name__)
-
-SERVICE_NAME = "forgejo"  # Name of Pebble service that runs in the workload container.
-FORGEJO_CLI = "/usr/local/bin/forgejo"
-ENVIRONMENT_TO_INI = "/usr/local/bin/environment-to-ini"
-CUSTOM_FORGEJO_CONFIG_DIR = "/etc/forgejo/"
-CUSTOM_FORGEJO_CONFIG_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "config.ini"
-PORT = 3000  # Forgejo's internal listen port (non-privileged, runs as git user uid 1000)
-FORGEJO_DATA_DIR = "/data"
-FORGEJO_SYSTEM_USER_ID = 1000
-FORGEJO_SYSTEM_USER = "git"
-FORGEJO_SYSTEM_GROUP_ID = 1000
-FORGEJO_SYSTEM_GROUP = "git"
 
 
 class ForgejoK8SOperatorCharm(ops.CharmBase):
@@ -70,7 +76,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
         framework.observe(getattr(self.on, "data_storage_attached"), self._on_storage_attached)
 
-        # actions
+        # actions - actions.py handlers
         framework.observe(self.on.generate_runner_secret_action, self._on_generate_runner_secret)
         framework.observe(self.on.create_admin_user_action, self._on_create_admin_user)
         framework.observe(self.on.generate_user_token_action, self._on_generate_user_token)
@@ -250,7 +256,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             return
 
         logger.info("Reconciling workload state")
-        # Ensure the base config file exists (fallback if install was deferred).
         self._init_config_file()
         try:
             config = self.load_config(ForgejoConfig)
@@ -260,46 +265,47 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
         try:
             db_data = self.fetch_postgres_relation_data()
-
-            # Configure TLS if certificates relation is available.
-            # Forgejo always listens on PORT (3000) regardless of TLS state;
-            # the protocol is controlled via the PROTOCOL/CERT_FILE/KEY_FILE config.
             tls_ready = self.cert_handler.configure_certs()
-
             domain = config.forgejo__server__domain
             protocol = "https" if tls_ready else "http"
 
-            if self.ingress.is_ready() and self.unit.is_leader():
-                if domain:
-                    logger.info(f"Config domain {domain} is valid, submitting traefik route")
-                    self.ingress.submit_to_traefik(
-                        self.get_traefik_route_configuration(domain, tls_ready)
-                    )
-                else:
-                    logger.error("No domain set in charm")
+            self._configure_ingress(domain, tls_ready)
 
-            # Build env vars: computed values and relational data (DB, TLS).
             additional_env = self._build_additional_env(domain, protocol, tls_ready, db_data)
 
             env_vars = map_config_to_env_vars(self, **additional_env)
+            self._apply_pebble_layer(env_vars)
 
-            self.container.add_layer("forgejo", self._get_pebble_layer(env_vars), combine=True)
-            logger.info("Added updated layer 'forgejo' to Pebble plan")
-
-            # Tell Pebble to incorporate the changes, including restarting the
-            # service if required. If the env vars haven't changed, replan is a no-op.
-            self.container.replan()
-            logger.info(f"Replanned with '{self.pebble_service_name}' service")
-
-            if version := self._forgejo_version:
-                self.unit.set_workload_version(version)
-            else:
-                logger.debug(
-                    "Cannot set workload version at this time: could not get Forgejo version."
-                )
         # @TODO: Extend exception handling
         except (ops.pebble.APIError, ops.pebble.ConnectionError) as e:
             logger.info("Unable to connect to Pebble: %s", e)
+
+    def _configure_ingress(self, domain: str, tls_ready: bool) -> None:
+        """Submit the Traefik route configuration if ingress is ready."""
+        if not (self.ingress.is_ready() and self.unit.is_leader()):
+            return
+        if not domain:
+            logger.error("No domain set in charm")
+            return
+        logger.info(f"Config domain {domain} is valid, submitting traefik route")
+        self.ingress.submit_to_traefik(
+            get_traefik_route_config(self.model.name, self.app.name, domain, PORT, tls_ready)
+        )
+
+    def _apply_pebble_layer(self, env_vars: dict) -> None:
+        """Update the Pebble layer and replan the service."""
+        self.container.add_layer("forgejo", self._get_pebble_layer(env_vars), combine=True)
+        logger.info("Added updated layer 'forgejo' to Pebble plan")
+
+        self.container.replan()
+        logger.info(f"Replanned with '{self.pebble_service_name}' service")
+
+        if version := self._forgejo_version:
+            self.unit.set_workload_version(version)
+        else:
+            logger.debug(
+                "Cannot set workload version at this time: could not get Forgejo version."
+            )
 
     @property
     def _tls_enabled(self) -> bool:
@@ -356,74 +362,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             return db_data
         return {}
 
-    def _fetch_s3_relation_data(self) -> dict[str, str]:
-        """Fetch S3 connection info from the s3-credentials relation."""
-        if not self.model.get_relation("s3-credentials"):
-            return {}
-        s3_info = self.s3_client.get_s3_connection_info()
-        if not s3_info:
-            return {}
-        return s3_info
-
-    @property
-    def traefik_service_name(self):
-        """Return the Traefik service name scoped to this model and app."""
-        return f"{self.model.name}-{self.model.app.name}-service"
-
-    def get_traefik_route_configuration(self, domain: str, tls_enabled: bool = False) -> dict:
-        """Configure a route from traefik to forgejo.
-
-        Forgejo always listens on PORT (3000) internally, running as a non-root user.
-        Traefik handles the external 80/443 mapping.
-
-        HTTP mode: standard HTTP router forwarding to Forgejo on port 3000.
-        TLS mode: TCP TLS-passthrough router so Forgejo terminates TLS on port 3000.
-        """
-        router_name = f"{self.model.name}-{self.model.app.name}-router"
-        # Use the stable Kubernetes service DNS so the address survives pod restarts.
-        k8s_service = f"{self.app.name}.{self.model.name}.svc.cluster.local"
-
-        if tls_enabled:
-            # TCP passthrough: Traefik forwards raw TLS bytes; Forgejo terminates TLS.
-            # HostSNI matches on the TLS SNI field, which requires passthrough mode.
-            return {
-                "tcp": {
-                    "routers": {
-                        router_name: {
-                            "rule": f"HostSNI(`{domain}`)",
-                            "service": self.traefik_service_name,
-                            "entryPoints": ["websecure"],
-                            "tls": {"passthrough": True},
-                        }
-                    },
-                    "services": {
-                        self.traefik_service_name: {
-                            "loadBalancer": {
-                                "servers": [{"address": f"{k8s_service}:{PORT}"}],
-                            }
-                        }
-                    },
-                }
-            }
-
-        # HTTP mode
-        return {
-            "http": {
-                "routers": {
-                    router_name: {
-                        "rule": f"Host(`{domain}`)",
-                        "service": self.traefik_service_name,
-                        "entryPoints": ["web"],
-                    }
-                },
-                "services": {
-                    self.traefik_service_name: {
-                        "loadBalancer": {"servers": [{"url": f"http://{k8s_service}:{PORT}"}]}
-                    }
-                },
-            }
-        }
-
     def _on_certificates_available(self, event: ops.EventBase) -> None:
         """Handle new/updated TLS certificate - switch Forgejo to HTTPS."""
         logger.info("TLS certificate available, switching to HTTPS")
@@ -464,102 +402,19 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         owner = f"{FORGEJO_SYSTEM_USER}:{FORGEJO_SYSTEM_GROUP}"
         self.container.exec(["chown", owner, FORGEJO_DATA_DIR])
 
+    # action wrappers
+
     def _on_generate_runner_secret(self, event: ops.ActionEvent) -> None:
-        """Generate a new runner secret and return it as action output."""
-        # SECRET=$(forgejo forgejo-cli actions generate-secret)
-        # forgejo forgejo-cli actions register --secret $SECRET --labels "docker"
-        params = event.params
-        name = params.get("name", "runner")
-        labels = params.get("labels", "docker")
-        scope = params.get("scope", None)
-        add_scope = ""
-        if scope:
-            add_scope = f"--scope {shlex.quote(scope)}"
-        # generate the secret
-        cmd = f"{FORGEJO_CLI} forgejo-cli actions generate-secret"
-        cmd_parts: list[str] = cast(list[str], cmd.split())
-        secret, _ = self.container.exec(cmd_parts).wait_output()
-        # register the runner with the generated secret
-        register_cmd = (
-            f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini"
-            f" forgejo-cli actions register "
-            f"--secret {shlex.quote(secret)} "
-            f"--labels {shlex.quote(labels)} "
-            f"--name {shlex.quote(name)} "
-            f"{add_scope}".strip()
-        )
-        argv = ["su", "git", "-c", register_cmd]
-        self.container.exec(argv).wait_output()
-        # send the secret back as action output
-        event.set_results({"runner-secret": secret})
+        on_generate_runner_secret(event, self.container)
 
     def _on_create_admin_user(self, event: ops.ActionEvent) -> None:
-        """Create an admin user in Forgejo."""
-        params = event.params
-        username = params.get("username")
-        email = params.get("email")
-        if not username or not email:
-            event.fail("username, password, and email parameters are required")
-            return
-        cmd = (
-            f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini admin user create "
-            f"--username {shlex.quote(username)} "
-            f"--email {shlex.quote(email)} "
-            f"--admin "
-            f"--random-password"
-        )
-        argv = ["su", "git", "-c", cmd]
-        output, _ = self.container.exec(argv).wait_output()
-        event.set_results({"output": output})
+        on_create_admin_user(event, self.container)
 
     def _on_generate_user_token(self, event: ops.ActionEvent) -> None:
-        """Generate an API access token for the specified Forgejo user."""
-        params = event.params
-        username = params.get("username")
-        token_name = params.get("token-name", "charm-token")
-        scopes = params.get("scopes", "all")
-        if not username:
-            event.fail("username parameter is required")
-            return
-        cmd = (
-            f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini"
-            f" admin user generate-access-token "
-            f"--username {shlex.quote(username)} "
-            f"--token-name {shlex.quote(token_name)} "
-            f"--scopes {shlex.quote(scopes)} "
-            f"--raw"
-        )
-        argv = ["su", "git", "-c", cmd]
-        try:
-            output, _ = self.container.exec(argv).wait_output()
-        except ops.pebble.ExecError as e:
-            event.fail(f"Failed to generate token: {e.stderr}")
-            return
-        event.set_results({"token": output.strip()})
+        on_generate_user_token(event, self.container)
 
     def _on_reset_user_password(self, event: ops.ActionEvent) -> None:
-        """Reset a Forgejo user's password to a new random value."""
-        username = event.params.get("username")
-        password = event.params.get("password")
-        if not username:
-            event.fail("username parameter is required")
-            return
-        if not password:
-            event.fail("password parameter is required")
-            return
-        cmd = (
-            f"{shlex.quote(FORGEJO_CLI)} --config=/etc/forgejo/config.ini"
-            f" admin user change-password "
-            f"--username {shlex.quote(username)} "
-            f"--password {shlex.quote(password)}"
-        )
-        argv = ["su", "git", "-c", cmd]
-        try:
-            output, _ = self.container.exec(argv).wait_output()
-        except ops.pebble.ExecError as e:
-            event.fail(f"Failed to reset password: {e.stderr}")
-            return
-        event.set_results({"output": output.strip()})
+        on_reset_user_password(event, self.container)
 
 
 if __name__ == "__main__":  # pragma: nocover
