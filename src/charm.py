@@ -4,11 +4,9 @@
 
 """Forgejo K8s Charm."""
 
-import dataclasses
 import logging
 import re
 import shlex
-from io import StringIO
 from typing import Optional, cast
 
 import ops
@@ -20,12 +18,13 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 
 from certificates import CertHandler
-from forgejo_handler import generate_config
+from config import ForgejoConfig, map_config_to_env_vars
 
 logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "forgejo"  # Name of Pebble service that runs in the workload container.
 FORGEJO_CLI = "/usr/local/bin/forgejo"
+ENVIRONMENT_TO_INI = "/usr/local/bin/environment-to-ini"
 CUSTOM_FORGEJO_CONFIG_DIR = "/etc/forgejo/"
 CUSTOM_FORGEJO_CONFIG_FILE = CUSTOM_FORGEJO_CONFIG_DIR + "config.ini"
 PORT = 3000  # Forgejo's internal listen port (non-privileged, runs as git user uid 1000)
@@ -34,44 +33,6 @@ FORGEJO_SYSTEM_USER_ID = 1000
 FORGEJO_SYSTEM_USER = "git"
 FORGEJO_SYSTEM_GROUP_ID = 1000
 FORGEJO_SYSTEM_GROUP = "git"
-
-
-@dataclasses.dataclass(frozen=True, kw_only=True)
-class ForgejoConfig:
-    """Configuration for the Forgejo k8s charm."""
-
-    log_level: str = "info"
-    domain: str = "forgejo.internal"
-    openid_whitelisted_uris: str = ""
-    disable_ssh: bool = False
-    disable_registration: bool = False
-    require_signin_view: bool = False
-    default_keep_email_private: bool = True
-    default_allow_create_organization: bool = True
-    enable_openid_signin: bool = True
-    enable_openid_signup: bool = True
-    default_user_visibility: str = "public"
-    default_org_visibility: str = "public"
-    disable_users_page: bool = False
-    disable_organizations_page: bool = False
-    disable_code_page: bool = False
-
-    def __post_init__(self):
-        """Validate configuration values."""
-        if self.log_level not in ["trace", "debug", "info", "warn", "error", "fatal"]:
-            raise ValueError(
-                "Invalid log level number, should be one of "
-                "trace, debug, info, warn, error, or fatal"
-            )
-        _valid_visibility = {"public", "limited", "private"}
-        if self.default_user_visibility not in _valid_visibility:
-            raise ValueError(
-                "Invalid default-user-visibility, must be one of public, limited, or private"
-            )
-        if self.default_org_visibility not in _valid_visibility:
-            raise ValueError(
-                "Invalid default-org-visibility, must be one of public, limited, or private"
-            )
 
 
 class ForgejoK8SOperatorCharm(ops.CharmBase):
@@ -103,7 +64,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             self, relation_name="grafana-dashboard"
         )
 
-        # framework.observe(self.on.install, self._on_install)
+        framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.forgejo_pebble_ready, self.reconcile)
         framework.observe(self.on.config_changed, self._on_config_changed)
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
@@ -118,7 +79,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         # TLS certificates support
         self.cert_handler = CertHandler(
             self,
-            common_name=str(self.model.config.get("domain") or self.app.name),
+            common_name=str(self.model.config.get("forgejo__server__domain") or self.app.name),
             events=[self.on.config_changed, self.on.forgejo_pebble_ready],
         )
         framework.observe(
@@ -162,7 +123,9 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         # If nothing is wrong, report active.
         if config:
             scheme = "https" if self._tls_enabled else "http"
-            event.add_status(ops.ActiveStatus(f"Serving at {scheme}://{config.domain}"))
+            event.add_status(
+                ops.ActiveStatus(f"Serving at {scheme}://{config.forgejo__server__domain}")
+            )
         else:
             event.add_status(ops.ActiveStatus())
 
@@ -173,8 +136,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             config = self.load_config(ForgejoConfig)
         except ValueError as e:
             event.add_status(ops.BlockedStatus(str(e)))
-        if config and not config.domain:
-            event.add_status(ops.BlockedStatus("domain config needs to be set"))
+        if config and not config.forgejo__server__domain:
+            event.add_status(ops.BlockedStatus("forgejo__server__domain config needs to be set"))
         return config
 
     def _collect_database_status(self, event: ops.CollectStatusEvent) -> None:
@@ -224,7 +187,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             return result
         return result.group(1)
 
-    def _get_pebble_layer(self) -> ops.pebble.Layer:
+    def _get_pebble_layer(self, env_vars: dict) -> ops.pebble.Layer:
         """Return the Pebble layer definition for the Forgejo service."""
         pebble_layer: ops.pebble.LayerDict = {
             "summary": "Forgejo service",
@@ -233,31 +196,62 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 self.pebble_service_name: {
                     "override": "replace",
                     "summary": "Forgejo service",
-                    "command": f"{FORGEJO_CLI} web --config={CUSTOM_FORGEJO_CONFIG_FILE}",
+                    "command": (
+                        f"/bin/sh -c '{ENVIRONMENT_TO_INI} -c {CUSTOM_FORGEJO_CONFIG_FILE}"
+                        f" && {FORGEJO_CLI} web --config={CUSTOM_FORGEJO_CONFIG_FILE}'"
+                    ),
                     "startup": "enabled",
                     "user-id": FORGEJO_SYSTEM_USER_ID,
                     "group-id": FORGEJO_SYSTEM_GROUP_ID,
                     "working-dir": FORGEJO_DATA_DIR,
+                    "environment": env_vars,
                 }
             },
         }
         return ops.pebble.Layer(pebble_layer)
 
+    def _build_additional_env(
+        self,
+        domain: str,
+        protocol: str,
+        tls_ready: bool,
+        db_data: dict,
+    ) -> dict:
+        """Build the additional env vars dict for environment-to-ini.
+
+        Returns FORGEJO__SECTION__KEY env vars that cannot come from Juju config:
+        - Computed server values only injected when the user has not set them via Juju config.
+        - Relation configuration.
+        """
+        env: dict = {
+            # Top-level (DEFAULT section)
+            "FORGEJO____RUN_USER": "git",
+            # Repository root
+            "FORGEJO__REPOSITORY__ROOT": "/data/gitea/data/forgejo-repositories",
+            **db_data,
+        }
+        # SSH_DOMAIN and ROOT_URL are computed from protocol+domain unless the user
+        # has explicitly set them via Juju config (empty string = use computed value).
+        if not self.config.get("forgejo__server__root_url", ""):
+            env["FORGEJO__SERVER__ROOT_URL"] = f"{protocol}://{domain}/"
+        if tls_ready:
+            env["FORGEJO__SERVER__PROTOCOL"] = "https"
+            env["FORGEJO__SERVER__CERT_FILE"] = self.cert_handler.cert_path
+            env["FORGEJO__SERVER__KEY_FILE"] = self.cert_handler.key_path
+        return env
+
     def _on_config_changed(self, e: ops.ConfigChangedEvent):
         self.reconcile(e)
-        if not self.container.get_plan().services.get(self.pebble_service_name):
-            logger.error("Cannot (re)start service: service does not (yet) exist.")
-            return
-        logger.info(f"Restarting service {self.pebble_service_name}")
-        self.container.restart(self.pebble_service_name)
 
     def reconcile(self, _: ops.EventBase) -> None:
-        """Reconcile charm state: write config, update Pebble layer, and replan."""
+        """Reconcile charm state: build env vars, update Pebble layer, and replan."""
         if not self.container.can_connect():
-            logger.info("Pebble not ready yet, deferring reconcile")
+            logger.warning("Pebble not ready yet, deferring reconcile")
             return
 
         logger.info("Reconciling workload state")
+        # Ensure the base config file exists (fallback if install was deferred).
+        self._init_config_file()
         try:
             config = self.load_config(ForgejoConfig)
         except ValueError as e:
@@ -272,59 +266,28 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             # the protocol is controlled via the PROTOCOL/CERT_FILE/KEY_FILE config.
             tls_ready = self.cert_handler.configure_certs()
 
+            domain = config.forgejo__server__domain
+            protocol = "https" if tls_ready else "http"
+
             if self.ingress.is_ready() and self.unit.is_leader():
-                if config.domain:
-                    logger.info(
-                        f"Config domain {config.domain} is valid, submitting traefik route"
-                    )
+                if domain:
+                    logger.info(f"Config domain {domain} is valid, submitting traefik route")
                     self.ingress.submit_to_traefik(
-                        self.get_traefik_route_configuration(config.domain, tls_ready)
+                        self.get_traefik_route_configuration(domain, tls_ready)
                     )
                 else:
                     logger.error("No domain set in charm")
 
-            # write the config file to the forgejo container's filesystem
-            cfg = generate_config(
-                domain=config.domain,
-                log_level=config.log_level,
-                database_info=db_data,
-                s3_info=self._fetch_s3_relation_data(),
-                use_port_in_domain=False,
-                http_port=PORT,
-                tls_enabled=tls_ready,
-                cert_file=self.cert_handler.cert_path if tls_ready else "",
-                key_file=self.cert_handler.key_path if tls_ready else "",
-                openid_whitelisted_uris=config.openid_whitelisted_uris,
-                disable_ssh=config.disable_ssh,
-                disable_registration=config.disable_registration,
-                require_signin_view=config.require_signin_view,
-                default_keep_email_private=config.default_keep_email_private,
-                default_allow_create_organization=config.default_allow_create_organization,
-                enable_openid_signin=config.enable_openid_signin,
-                enable_openid_signup=config.enable_openid_signup,
-                default_user_visibility=config.default_user_visibility,
-                default_org_visibility=config.default_org_visibility,
-                disable_users_page=config.disable_users_page,
-                disable_organizations_page=config.disable_organizations_page,
-                disable_code_page=config.disable_code_page,
-            )
-            buf = StringIO()
-            cfg.write(buf)
-            self.container.push(
-                CUSTOM_FORGEJO_CONFIG_FILE,
-                buf.getvalue(),
-                make_dirs=True,
-                user_id=FORGEJO_SYSTEM_USER_ID,
-                user=FORGEJO_SYSTEM_USER,
-                group_id=FORGEJO_SYSTEM_GROUP_ID,
-                group=FORGEJO_SYSTEM_GROUP,
-            )
+            # Build env vars: computed values and relational data (DB, TLS).
+            additional_env = self._build_additional_env(domain, protocol, tls_ready, db_data)
 
-            self.container.add_layer("forgejo", self._get_pebble_layer(), combine=True)
+            env_vars = map_config_to_env_vars(self, **additional_env)
+
+            self.container.add_layer("forgejo", self._get_pebble_layer(env_vars), combine=True)
             logger.info("Added updated layer 'forgejo' to Pebble plan")
 
             # Tell Pebble to incorporate the changes, including restarting the
-            # service if required.
+            # service if required. If the env vars haven't changed, replan is a no-op.
             self.container.replan()
             logger.info(f"Replanned with '{self.pebble_service_name}' service")
 
@@ -368,7 +331,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         the `fetch_relation_data` method of the `database` object. The retrieved data is
         then logged for debugging purposes, and any non-empty data is processed to extract
         endpoint information, username, and password. This processed data is then returned as
-        a dictionary. If no data is retrieved, the unit is set to waiting status and
+        a dictionary of FORGEJO__DATABASE__* env vars for environment-to-ini.
+        If no data is retrieved, the unit is set to waiting status and
         the program exits with a zero status code.
         """
         relations = self.database.fetch_relation_data()
@@ -379,15 +343,15 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             logger.info("New database endpoint is %s", data["endpoints"])
             host, port = data["endpoints"].split(":")
             db_data = {
-                "DB_TYPE": "postgres",
-                "HOST": host,
-                "PORT": port,
-                "NAME": self.database_name,
-                "USER": data["username"],
-                "PASSWD": data["password"],
-                "SCHEMA": "",
-                "SSL_MODE": "disable",
-                "LOG_SQL": "false",
+                "FORGEJO__DATABASE__DB_TYPE": "postgres",
+                "FORGEJO__DATABASE__HOST": host,
+                "FORGEJO__DATABASE__PORT": port,
+                "FORGEJO__DATABASE__NAME": self.database_name,
+                "FORGEJO__DATABASE__USER": data["username"],
+                "FORGEJO__DATABASE__PASSWD": data["password"],
+                "FORGEJO__DATABASE__SCHEMA": "",
+                "FORGEJO__DATABASE__SSL_MODE": "disable",
+                "FORGEJO__DATABASE__LOG_SQL": "false",
             }
             return db_data
         return {}
@@ -464,7 +428,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         """Handle new/updated TLS certificate - switch Forgejo to HTTPS."""
         logger.info("TLS certificate available, switching to HTTPS")
         self.reconcile(event)
-        self._restart_service()
 
     def _on_certificates_removed(self, event: ops.EventBase) -> None:
         """Handle TLS certificate removal - switch Forgejo back to HTTP."""
@@ -472,18 +435,30 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         if self.container.can_connect():
             self.cert_handler.remove_certs()
         self.reconcile(event)
-        self._restart_service()
 
-    def _restart_service(self) -> None:
-        """Restart the Forgejo service if it is currently running."""
+    def _on_install(self, event: ops.InstallEvent) -> None:
+        """Create the empty base config file that environment-to-ini will overlay."""
         if not self.container.can_connect():
+            logger.info(
+                "Container not ready at install time; config file will be created at pebble-ready"
+            )
+            event.defer()
             return
-        try:
-            if self.container.get_service(self.pebble_service_name).is_running():
-                self.container.restart(self.pebble_service_name)
-                logger.info(f"Restarted {self.pebble_service_name} to pick up certificate changes")
-        except (ops.pebble.APIError, ops.ModelError) as e:
-            logger.warning("Could not restart service: %s", e)
+        self._init_config_file()
+
+    def _init_config_file(self) -> None:
+        """Ensure the Forgejo config directory and an empty base config file exist."""
+        if not self.container.exists(CUSTOM_FORGEJO_CONFIG_FILE):
+            self.container.push(
+                CUSTOM_FORGEJO_CONFIG_FILE,
+                "",
+                make_dirs=True,
+                user_id=FORGEJO_SYSTEM_USER_ID,
+                user=FORGEJO_SYSTEM_USER,
+                group_id=FORGEJO_SYSTEM_GROUP_ID,
+                group=FORGEJO_SYSTEM_GROUP,
+            )
+            logger.info("Created empty base config file at %s", CUSTOM_FORGEJO_CONFIG_FILE)
 
     def _on_storage_attached(self, _: ops.StorageAttachedEvent) -> None:
         owner = f"{FORGEJO_SYSTEM_USER}:{FORGEJO_SYSTEM_GROUP}"

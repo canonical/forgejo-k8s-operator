@@ -102,14 +102,14 @@ parts:
 
 config:
   options:
-    log-level:
+    forgejo__log__level:
       description: |
         Configures the log level of Forgejo.
 
-        Acceptable values are one of trace, debug, info, warn, error, or fatal.
-      default: "info"
+        Acceptable values are one of Trace, Debug, Info, Warn, Error, Critical, Fatal or None.
+      default: "Info"
       type: string
-    domain:
+    forgejo__server__domain:
       description: |
         Domain name to use as root url for Forgejo.
 
@@ -117,67 +117,213 @@ config:
         the final url has both domains, like <forgejo-charm-config-domain>.<ingress-domain>
       default: "forgejo.internal"
       type: string
-    openid-whitelisted-uris:
+    forgejo__openid__whitelisted_uris:
       description: |
         Comma-separated list of OpenID URIs to whitelist for sign-in/sign-up.
 
         When empty, no whitelist restriction is applied.
       default: ""
       type: string
-    disable-ssh:
+    forgejo__server__disable_ssh:
       description: Disable SSH support in Forgejo.
       default: false
       type: boolean
-    disable-registration:
+    forgejo__service__disable_registration:
       description: Disable user self-registration.
       default: false
       type: boolean
-    require-signin-view:
+    forgejo__service__require_signin_view:
       description: Require users to sign in to view any page.
       default: false
       type: boolean
-    default-keep-email-private:
+    forgejo__service__default_keep_email_private:
       description: Set new users' email address to private by default.
       default: true
       type: boolean
-    default-allow-create-organization:
+    forgejo__service__default_allow_create_organization:
       description: Allow users to create organizations by default.
       default: true
       type: boolean
-    enable-openid-signin:
+    forgejo__openid__enable_openid_signin:
       description: Enable sign-in via OpenID.
       default: true
       type: boolean
-    enable-openid-signup:
+    forgejo__openid__enable_openid_signup:
       description: Enable sign-up via OpenID.
       default: true
       type: boolean
-    default-user-visibility:
+    forgejo__service__default_user_visibility:
       description: |
         Default visibility for new users.
 
         Acceptable values are "public", "limited", or "private".
       default: "public"
       type: string
-    default-org-visibility:
+    forgejo__service__default_org_visibility:
       description: |
         Default visibility for new organizations.
 
         Acceptable values are "public", "limited", or "private".
       default: "public"
       type: string
-    disable-users-page:
+    forgejo__explore__disable_users_page:
       description: Disable the users explore page.
       default: false
       type: boolean
-    disable-organizations-page:
+    forgejo__explore__disable_organizations_page:
       description: Disable the organizations explore page.
       default: false
       type: boolean
-    disable-code-page:
+    forgejo__explore__disable_code_page:
       description: Disable the code explore page.
       default: false
       type: boolean
+    forgejo____app_name:
+      description: Name of the Forgejo instance shown in the UI.
+      default: "Forgejo"
+      type: string
+    forgejo____app_slogan:
+      description: Slogan shown below the app name in the UI.
+      default: "Beyond coding. We Forge."
+      type: string
+    forgejo____run_mode:
+      description: |
+        Forgejo run mode. Use "prod" for production deployments.
+
+        Acceptable values are "prod" or "dev".
+      default: "prod"
+      type: string
+    forgejo____work_path:
+      description: Top-level working directory for Forgejo data.
+      default: "/data/gitea"
+      type: string
+    forgejo__lfs__path:
+      description: Directory where Git LFS objects are stored.
+      default: "/data/gitea/data/lfs"
+      type: string
+    forgejo__server__http_port:
+      description: Internal HTTP port Forgejo listens on.
+      default: 3000
+      type: int
+    forgejo__server__ssh_port:
+      description: SSH port exposed to users for Git-over-SSH.
+      default: 22
+      type: int
+    forgejo__server__lfs_start_server:
+      description: Enable the built-in Git LFS server.
+      default: true
+      type: boolean
+    forgejo__server__offline_mode:
+      description: |
+        Disable CDN and external avatar sources; serve all assets locally.
+      default: true
+      type: boolean
+    forgejo__server__app_data_path:
+      description: Directory for application data (attachments, avatars, etc.).
+      default: "/data/gitea/data"
+      type: string
+    forgejo__server__ssh_domain:
+      description: |
+        Domain shown to users for SSH clone URLs.
+
+        Leave empty to use the value of forgejo__server__domain.
+      default: ""
+      type: string
+    forgejo__server__root_url:
+      description: |
+        Canonical root URL for Forgejo (e.g. https://git.example.com/).
+
+        Leave empty to have it computed automatically from the domain and TLS state.
+      default: ""
+      type: string
+    forgejo__mailer__enabled:
+      description: Enable the built-in mailer for notifications and confirmations.
+      default: false
+      type: boolean
+    forgejo__service__register_email_confirm:
+      description: Require email confirmation before account activation.
+      default: false
+      type: boolean
+    forgejo__service__enable_notify_mail:
+      description: Send email notifications for issue and pull-request activity.
+      default: false
+      type: boolean
+    forgejo__service__allow_only_external_registration:
+      description: Disable local account creation; allow only OAuth/OpenID registration.
+      default: false
+      type: boolean
+    forgejo__service__enable_captcha:
+      description: Show a CAPTCHA on the registration form.
+      default: true
+      type: boolean
+    forgejo__service__default_enable_timetracking:
+      description: Enable time-tracking for new repositories by default.
+      default: true
+      type: boolean
+    forgejo__service__no_reply_address:
+      description: Email address used as the From address for no-reply notifications.
+      default: "noreply.localhost"
+      type: string
+    forgejo__session__provider:
+      description: |
+        Session storage backend.
+
+        Acceptable values are "file", "db", or "memory".
+      default: "file"
+      type: string
+    forgejo__log__mode:
+      description: Logging output mode (e.g. "console", "file").
+      default: "console"
+      type: string
+    forgejo__log__root_path:
+      description: Directory where log files are written when log mode includes "file".
+      default: "/data/gitea/log"
+      type: string
+    forgejo__security__install_lock:
+      description: |
+        Lock the installation wizard after initial setup.
+
+        Should remain true in production to prevent re-initialisation.
+      default: true
+      type: boolean
+    forgejo__security__password_hash_algo:
+      description: Password hashing algorithm used for new accounts.
+      default: "pbkdf2_hi"
+      type: string
+    forgejo__oauth2__enabled:
+      description: Enable the OAuth2 provider (allows other apps to authenticate via Forgejo).
+      default: true
+      type: boolean
+    forgejo__metrics__enabled:
+      description: Enable the Prometheus-compatible /metrics endpoint.
+      default: true
+      type: boolean
+    forgejo__metrics__enabled_issue_by_label:
+      description: Include per-label issue counts in the metrics output.
+      default: true
+      type: boolean
+    forgejo__metrics__enabled_issue_by_repository:
+      description: Include per-repository issue counts in the metrics output.
+      default: true
+      type: boolean
+    forgejo__cron__update_checker__enabled:
+      description: Enable the periodic Forgejo update-checker cron job.
+      default: true
+      type: boolean
+    forgejo__repository__signing__default_trust_model:
+      description: |
+        Default GPG signing trust model for new repositories.
+
+        Acceptable values are "collaborator", "committer" or "collaboratorcommitter".
+      default: "collaborator"
+      type: string
+    forgejo__repository__pull_request__default_merge_style:
+      description: |
+        Default merge style for pull requests.
+
+        Acceptable values are "merge", "rebase", "rebase-merge", "squash" or "fast-forward-only".
+      default: "merge"
+      type: string
 
 assumes:
   - juju >= 3.5
