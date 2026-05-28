@@ -18,6 +18,7 @@ def generate_config(
     domain: str = "localhost",
     http_port: int = 3000,
     database_info: dict[str, str] | None = None,
+    s3_info: dict[str, str] | None = None,
     log_level: str = "info",
     use_port_in_domain: bool = True,
     tls_enabled: bool = False,
@@ -127,6 +128,20 @@ def generate_config(
     config["oauth2"] = {
         "enabled": "true",
     }
+
+    if s3_info:
+        storage_config: dict[str, str] = {
+            "STORAGE_TYPE": "minio",
+            "MINIO_ENDPOINT": s3_info.get("endpoint", ""),
+            "MINIO_ACCESS_KEY_ID": s3_info.get("access-key", ""),
+            "MINIO_SECRET_ACCESS_KEY": s3_info.get("secret-key", ""),
+            "MINIO_BUCKET": s3_info.get("bucket", "forgejo"),
+            "MINIO_LOCATION": s3_info.get("region", ""),
+            "MINIO_USE_SSL": "true",
+        }
+        if s3_info.get("path"):
+            storage_config["MINIO_BASE_PATH"] = s3_info["path"]
+        config["storage"] = storage_config
 
     config["metrics"] = {
         "ENABLED": "true",
