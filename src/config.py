@@ -4,9 +4,10 @@ Utilities for mapping charm config to Forgejo environment variables and
 validating config values.
 """
 
-import dataclasses
+from typing import Literal
 
 import ops
+from pydantic import BaseModel, ConfigDict
 
 # Explicit env var name overrides for Juju config options
 _CONFIG_KEY_OVERRIDES: dict[str, str] = {
@@ -48,70 +49,32 @@ def map_config_to_env_vars(
     return {**env_mapped_config, **additional_env}
 
 
-@dataclasses.dataclass(frozen=True, kw_only=True)
-class ForgejoConfig:
-    """Validated Forgejo configuration (fields correspond to charm config option names)."""
+class ForgejoConfig(BaseModel):
+    """Validated Forgejo configuration."""
 
-    forgejo__log__level: str
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    forgejo__log__level: Literal[
+        "Trace", "Debug", "Info", "Warn", "Error", "Critical", "Fatal", "None"
+    ]
     forgejo__server__domain: str
-    forgejo__service__default_user_visibility: str
-    forgejo__service__default_org_visibility: str
-    forgejo____run_mode: str
-    forgejo__session__provider: str
-    forgejo__repository__signing__default_trust_model: str
-    forgejo__repository__pull_request__default_merge_style: str
-
-    def __post_init__(self):
-        """Validate configuration values."""
-        _valid_log_levels = {
-            "Trace",
-            "Debug",
-            "Info",
-            "Warn",
-            "Error",
-            "Critical",
-            "Fatal",
-            "None",
-        }
-        if self.forgejo__log__level not in _valid_log_levels:
-            raise ValueError(f"Invalid log level number, should be one of {_valid_log_levels}")
-        _valid_visibility = {"public", "limited", "private"}
-        if self.forgejo__service__default_user_visibility not in _valid_visibility:
-            raise ValueError(
-                "Invalid forgejo__service__default_user_visibility, "
-                f"must be one of {_valid_visibility}"
-            )
-        if self.forgejo__service__default_org_visibility not in _valid_visibility:
-            raise ValueError(
-                "Invalid forgejo__service__default_org_visibility, "
-                f"must be one of {_valid_visibility}"
-            )
-        if self.forgejo____run_mode not in {"prod", "dev"}:
-            raise ValueError("Invalid forgejo____run_mode, must be one of prod, or dev")
-        _valid_session_providers = {
-            "memory",
-            "file",
-            "redis",
-            "redis-cluster",
-            "db",
-            "mysql",
-            "couchbase",
-            "memcache",
-            "postgres",
-        }
-        if self.forgejo__session__provider not in _valid_session_providers:
-            raise ValueError(
-                f"Invalid forgejo__session__provider, must be one of {_valid_session_providers}"
-            )
-        _valid_trust_models = {"collaborator", "committer", "collaboratorcommitter"}
-        if self.forgejo__repository__signing__default_trust_model not in _valid_trust_models:
-            raise ValueError(
-                "Invalid forgejo__repository__signing__default_trust_model, "
-                f"must be one of {_valid_trust_models}"
-            )
-        _valid_merge_styles = {"merge", "rebase", "rebase-merge", "squash", "fast-forward-only"}
-        if self.forgejo__repository__pull_request__default_merge_style not in _valid_merge_styles:
-            raise ValueError(
-                "Invalid forgejo__repository__pull_request__default_merge_style, "
-                f"must be one of {_valid_merge_styles}"
-            )
+    forgejo__service__default_user_visibility: Literal["public", "limited", "private"]
+    forgejo__service__default_org_visibility: Literal["public", "limited", "private"]
+    forgejo____run_mode: Literal["prod", "dev"]
+    forgejo__session__provider: Literal[
+        "memory",
+        "file",
+        "redis",
+        "redis-cluster",
+        "db",
+        "mysql",
+        "couchbase",
+        "memcache",
+        "postgres",
+    ]
+    forgejo__repository__signing__default_trust_model: Literal[
+        "collaborator", "committer", "collaboratorcommitter"
+    ]
+    forgejo__repository__pull_request__default_merge_style: Literal[
+        "merge", "rebase", "rebase-merge", "squash", "fast-forward-only"
+    ]
