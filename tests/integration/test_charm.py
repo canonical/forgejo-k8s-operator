@@ -2,16 +2,14 @@
 
 import logging
 import secrets
-import shutil
 import subprocess
 import urllib.error
 import urllib.request
 from pathlib import Path
 
+import jubilant
 import pytest
-import pytest_asyncio
 import yaml
-from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
@@ -19,66 +17,43 @@ METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 APP_NAME = METADATA["name"]
 
 
-@pytest_asyncio.fixture(scope="module")
-async def deployed_app(ops_test: OpsTest, forgejo_image):
-    """Build and deploy the full charm stack; yield the forgejo-k8s Application object."""
-    local_src = ops_test.tmp_path / "charm-src"
-    if not local_src.exists():
-        shutil.copytree(
-            ".",
-            local_src,
-            symlinks=True,
-            ignore=shutil.ignore_patterns(".git", ".tox", "parts", "stage", "prime", "*.charm"),
-        )
-
-    charm = await ops_test.build_charm(local_src)
-    resources = {"forgejo-image": forgejo_image}
-
-    await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME)
-
-    # Deploy postgresql-k8s and relate it (required relation)
-    await ops_test.model.deploy("postgresql-k8s", channel="14/stable", trust=True)
-    await ops_test.model.integrate(f"{APP_NAME}:database", "postgresql-k8s:database")
-
-    await ops_test.model.wait_for_idle(
-        apps=["postgresql-k8s"],
-        status="active",
-        raise_on_blocked=True,
-        timeout=1000,
+@pytest.fixture(scope="module")
+def deployed_app(charm: Path, juju: jubilant.Juju, forgejo_image):
+    """Deploy the full charm stack; yield the app name."""
+    juju.deploy(
+        charm,
+        APP_NAME,
+        resources={"forgejo-image": forgejo_image},
     )
-    await ops_test.model.wait_for_idle(
-        apps=[APP_NAME, "postgresql-k8s"],
-        status="active",
-        raise_on_blocked=False,
+    juju.deploy("postgresql-k8s", channel="14/stable", trust=True)
+    juju.integrate(f"{APP_NAME}:database", "postgresql-k8s:database")
+
+    juju.wait(
+        lambda status: jubilant.all_active(status, APP_NAME, "postgresql-k8s"),
         timeout=1000,
     )
 
-    yield ops_test.model.applications[APP_NAME]
+    yield APP_NAME
 
 
-@pytest.mark.abort_on_fail
-async def test_build_and_deploy(deployed_app):
+@pytest.mark.juju_setup
+def test_build_and_deploy(deployed_app, juju: jubilant.Juju):
     """Assert the deployed charm and its dependencies reach active status."""
-    assert deployed_app.status == "active"
+    status = juju.status()
+    assert status.apps[deployed_app].is_active
 
 
-async def test_metrics_bearer_token(ops_test: OpsTest, deployed_app):
+def test_metrics_bearer_token(deployed_app, juju: jubilant.Juju):
     """Verify Forgejo enforces bearer-token auth on /metrics when configured."""
     token = secrets.token_hex(16)
 
     # Create a Juju user secret and grant it to the application.
-    return_code, stdout, stderr = await ops_test.juju(
-        "add-secret", "forgejo-metrics-token", f"value={token}"
-    )
-    assert return_code == 0, f"add-secret failed: {stderr}"
-    secret_id = stdout.strip()
-    logger.info("Created Juju secret %s", secret_id)
+    secret_uri = juju.add_secret("forgejo-metrics-token", {"value": token})
+    logger.info("Created Juju secret %s", secret_uri)
+    juju.grant_secret(secret_uri, APP_NAME)
 
-    return_code, _, stderr = await ops_test.juju("grant-secret", secret_id, APP_NAME)
-    assert return_code == 0, f"grant-secret failed: {stderr}"
-
-    await deployed_app.set_config({"forgejo__metrics__token": secret_id})
-    await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", timeout=120)
+    juju.config(APP_NAME, {"forgejo__metrics__token": secret_uri})
+    juju.wait(lambda status: jubilant.all_active(status, APP_NAME), timeout=120)
 
     # In microk8s, pod IPs are directly routable from the host.
     forgejo_pod = f"{APP_NAME}-0"
@@ -88,7 +63,7 @@ async def test_metrics_bearer_token(ops_test: OpsTest, deployed_app):
             "get",
             "pod",
             "-n",
-            ops_test.model_name,
+            juju.model,
             forgejo_pod,
             "-o",
             "jsonpath={.status.podIP}",
@@ -114,5 +89,5 @@ async def test_metrics_bearer_token(ops_test: OpsTest, deployed_app):
         assert resp.status == 200, f"Expected 200 with correct bearer token, got {resp.status}"
 
     # Teardown: remove the token so the deploy is clean for any later tests.
-    await deployed_app.reset_config(["forgejo__metrics__token"])
-    await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", timeout=120)
+    juju.config(APP_NAME, reset=["forgejo__metrics__token"])
+    juju.wait(lambda status: jubilant.all_active(status, APP_NAME), timeout=120)

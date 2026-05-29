@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import pathlib
 
 import pytest
 
@@ -27,3 +28,18 @@ def forgejo_image(request):
         or os.environ.get("FORGEJO_IMAGE")
         or DEFAULT_FORGEJO_IMAGE
     )
+
+
+@pytest.fixture(scope="session")
+def charm():
+    """Return the path of the packed charm under test."""
+    charm_path = os.environ.get("CHARM_PATH")
+    if not charm_path:
+        charm_dir = pathlib.Path()
+        charms = list(charm_dir.glob("*.charm"))
+        assert charms, f"No charms found in {charm_dir.absolute()}"
+        assert len(charms) == 1, f"Found more than one charm: {charms}"
+        charm_path = charms[0]
+    path = pathlib.Path(charm_path).resolve()
+    assert path.is_file(), f"{path} is not a file"
+    return path
