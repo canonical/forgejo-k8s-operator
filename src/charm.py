@@ -71,6 +71,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
         framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.forgejo_pebble_ready, self.reconcile)
+        framework.observe(self.on.forgejo_pebble_check_failed, self._on_pebble_check_changed)
+        framework.observe(self.on.forgejo_pebble_check_recovered, self._on_pebble_check_changed)
         framework.observe(self.on.config_changed, self._on_config_changed)
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
         framework.observe(getattr(self.on, "data_storage_attached"), self._on_storage_attached)
@@ -118,6 +120,9 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
     def database_name(self):
         """Return the database name scoped to this model and app."""
         return f"{self.model.name}-{self.app.name}"
+
+    def _on_pebble_check_changed(self, _: ops.EventBase) -> None:
+        """No-op: ops emits collect_unit_status automatically after every event."""
 
     def _on_collect_status(self, event: ops.CollectStatusEvent) -> None:
         """Collect and report the unit status."""
@@ -175,6 +180,10 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         else:
             if not status.is_running():
                 event.add_status(ops.MaintenanceStatus("Waiting for Forgejo to start up"))
+                return
+            checks = self.container.get_checks("forgejo-ready")
+            if checks and checks["forgejo-ready"].status != ops.pebble.CheckStatus.UP:
+                event.add_status(ops.MaintenanceStatus("Waiting for Forgejo to be ready"))
 
     @property
     def _forgejo_version(self) -> Optional[str]:
@@ -211,6 +220,13 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                     "group-id": FORGEJO_SYSTEM_GROUP_ID,
                     "working-dir": FORGEJO_DATA_DIR,
                     "environment": env_vars,
+                }
+            },
+            "checks": {
+                "forgejo-ready": {
+                    "override": "replace",
+                    "level": "ready",
+                    "http": {"url": f"http://localhost:{PORT}/api/healthz"},
                 }
             },
         }

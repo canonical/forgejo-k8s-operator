@@ -6,7 +6,6 @@ import logging
 import secrets
 import shutil
 import subprocess
-import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -20,37 +19,6 @@ logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 APP_NAME = METADATA["name"]
-
-
-def _wait_for_forgejo_ready(ops_test: OpsTest, pod: str, timeout: int = 60) -> None:
-    """Block until Forgejo's health endpoint returns 200 inside *pod*.
-
-    Uses wget (present in Forgejo's Alpine image) to probe /api/healthz.
-    """
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        result = subprocess.run(
-            [
-                "kubectl",
-                "exec",
-                "-n",
-                ops_test.model_name,
-                pod,
-                "-c",
-                "forgejo",
-                "--",
-                "wget",
-                "-qO",
-                "/dev/null",
-                "http://localhost:3000/api/healthz",
-            ],
-            capture_output=True,
-            timeout=10,
-        )
-        if result.returncode == 0:
-            return
-        time.sleep(2)
-    raise TimeoutError(f"Forgejo in {pod} not healthy after {timeout}s")
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -114,11 +82,8 @@ async def test_metrics_bearer_token(ops_test: OpsTest, deployed_app):
     await deployed_app.set_config({"forgejo__metrics__token": secret_id})
     await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", timeout=120)
 
-    # Wait until Forgejo is actually serving HTTP inside the pod.
-    forgejo_pod = f"{APP_NAME}-0"
-    _wait_for_forgejo_ready(ops_test, forgejo_pod)
-
     # In microk8s, pod IPs are directly routable from the host.
+    forgejo_pod = f"{APP_NAME}-0"
     pod_ip_result = subprocess.run(
         [
             "kubectl",
