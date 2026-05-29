@@ -1,6 +1,9 @@
+from unittest.mock import MagicMock
+
+import ops
 import pytest
 
-from config import ForgejoConfig, ForgejoStorageConfig
+from config import ForgejoConfig, ForgejoStorageConfig, map_config_to_env_vars
 
 VALID_KWARGS = {
     "forgejo__log__level": "Info",
@@ -79,3 +82,43 @@ def test_forgejo_storage_config_from_s3_info():
     assert cfg.location == "us-east-1"
     assert cfg.base_path == ""  # Default value
     assert cfg.use_ssl is True  # Default value
+
+
+def _make_mock_charm(secret_id: str, content: dict | None) -> MagicMock:
+    """Build a minimal mock charm whose model.get_secret returns a mock secret."""
+    charm = MagicMock(spec=ops.CharmBase)
+    mock_secret = MagicMock()
+    mock_secret.get_content.return_value = content or {}
+    charm.model.get_secret.return_value = mock_secret
+    return charm
+
+
+def _make_mock_charm_error(secret_id: str, error=None) -> MagicMock:
+    """Build a minimal mock charm whose model.get_secret returns a mock secret."""
+    charm = MagicMock(spec=ops.CharmBase)
+    charm.model.get_secret.side_effect = error
+    return charm
+
+
+def test_map_config_to_env_vars_resolves_secrets():
+    """map_config_to_env_vars resolves secret-valued config keys into plaintext env vars."""
+    charm = _make_mock_charm("secret:xyz789", {"value": "resolved-secret-value"})
+    charm.config = {"forgejo__security__secret_key": "secret:xyz789"}
+    env = map_config_to_env_vars(charm)
+    assert env.get("FORGEJO__SECURITY__SECRET_KEY") == "resolved-secret-value"
+
+
+def test_map_config_to_env_vars_skips_unresolvable_secrets():
+    """map_config_to_env_vars omits env vars whose secret cannot be resolved."""
+    charm = _make_mock_charm_error("secret:bad", error=ops.SecretNotFoundError("secret:bad"))
+    charm.config = {"forgejo__security__secret_key": "secret:bad"}
+    env = map_config_to_env_vars(charm)
+    assert "FORGEJO__SECURITY__SECRET_KEY" not in env
+
+
+def test_map_config_to_env_vars_skips_missing_value_key():
+    """map_config_to_env_vars omits env vars when the secret has no 'value' key."""
+    charm = _make_mock_charm("secret:noval", {"wrong_key": "oops"})
+    charm.config = {"forgejo__security__secret_key": "secret:noval"}
+    env = map_config_to_env_vars(charm)
+    assert "FORGEJO__SECURITY__SECRET_KEY" not in env

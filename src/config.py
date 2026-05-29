@@ -4,10 +4,13 @@ Utilities for mapping charm config to Forgejo environment variables and
 validating config values.
 """
 
+import logging
 from typing import Literal
 
 import ops
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
+
+logger = logging.getLogger(__name__)
 
 # Explicit env var name overrides for Juju config options
 _CONFIG_KEY_OVERRIDES: dict[str, str] = {
@@ -15,6 +18,24 @@ _CONFIG_KEY_OVERRIDES: dict[str, str] = {
     "forgejo__repository__signing__default_trust_model": "FORGEJO__REPOSITORY_0X2E_SIGNING__DEFAULT_TRUST_MODEL",  # noqa: E501
     "forgejo__repository__pull_request__default_merge_style": "FORGEJO__REPOSITORY_0X2E_PULL-REQUEST__DEFAULT_MERGE_STYLE",  # noqa: E501
 }
+
+
+def _fetch_secret(charm: ops.CharmBase, secret_id: str) -> str | None:
+    """Fetch a Juju secret value."""
+    try:
+        secret = charm.model.get_secret(id=secret_id)
+        content = secret.get_content(refresh=True)
+    except (ops.SecretNotFoundError, ops.model.ModelError) as e:
+        logger.error("Cannot access Juju secret %s: %s", secret_id, e)
+        return None
+
+    value = content.get("value")
+    if value is None:
+        logger.warning(
+            "Juju secret %s has no 'value' key; use juju add-secret ... value=<secret>",
+            secret_id,
+        )
+    return value
 
 
 def map_config_to_env_vars(
@@ -37,8 +58,10 @@ def map_config_to_env_vars(
     env_mapped_config = {}
     for k, v in charm.config.items():
         if str(v).startswith("secret:"):
-            # TODO: support secrets
-            continue
+            secret = _fetch_secret(charm, str(v))
+            if secret is None:
+                continue
+            v = secret
         if k in _CONFIG_KEY_OVERRIDES:
             env_key = _CONFIG_KEY_OVERRIDES[k]
             env_mapped_config[env_key] = v
