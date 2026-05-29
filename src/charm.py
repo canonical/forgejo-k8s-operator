@@ -62,7 +62,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         self._prometheus_scraping = MetricsEndpointProvider(
             self,
             relation_name="metrics-endpoint",
-            jobs=[{"static_configs": [{"targets": [f"*:{PORT}"]}]}],
             refresh_event=self.on.config_changed,
         )
         self._logging = LogForwarder(self, relation_name="logging")
@@ -253,6 +252,13 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
     def _on_secret_changed(self, e: ops.SecretChangedEvent) -> None:
         self.reconcile(e)
 
+    def _configure_prometheus(self, env_vars: dict):
+        job: dict = {"static_configs": [{"targets": [f"*:{PORT}"]}]}
+        if token := env_vars.get("FORGEJO__METRICS__TOKEN"):
+            job["authorization"] = {"credentials": token}
+
+        self._prometheus_scraping.update_scrape_job_spec([job])
+
     def reconcile(self, _: ops.EventBase) -> None:
         """Reconcile charm state: build env vars, update Pebble layer, and replan."""
         if not self.container.can_connect():
@@ -276,6 +282,9 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
             additional_env = self._build_additional_env(domain, protocol, tls_ready)
             env_vars = map_config_to_env_vars(self, **additional_env)
+            self._configure_ingress(domain, tls_ready)
+            self._configure_prometheus(env_vars)
+
             self._apply_pebble_layer(env_vars)
 
         # @TODO: Extend exception handling
