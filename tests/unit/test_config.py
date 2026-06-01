@@ -1,6 +1,6 @@
 import pytest
 
-from config import ForgejoConfig
+from config import ForgejoConfig, ForgejoStorageConfig
 
 VALID_KWARGS = {
     "forgejo__log__level": "Info",
@@ -36,3 +36,46 @@ def test_forgejo_config_invalid(field, invalid_value):
     kwargs = {**VALID_KWARGS, field: invalid_value}
     with pytest.raises(ValueError):
         ForgejoConfig(**kwargs)
+
+
+def test_forgejo_storage_config_dump_aliases():
+    """model_dump(by_alias=True) uses FORGEJO__STORAGE__* keys."""
+    cfg = ForgejoStorageConfig(
+        endpoint="minio:9000",
+        access_key_id="AKID",
+        secret_access_key="SECRET",
+        bucket="my-bucket",
+        location="us-east-1",
+        base_path="path/",
+        use_ssl=False,
+    )
+    dumped = cfg.model_dump(by_alias=True)
+    assert dumped == {
+        "FORGEJO__STORAGE__STORAGE_TYPE": "minio",
+        "FORGEJO__STORAGE__MINIO_ENDPOINT": "minio:9000",
+        "FORGEJO__STORAGE__MINIO_ACCESS_KEY_ID": "AKID",
+        "FORGEJO__STORAGE__MINIO_SECRET_ACCESS_KEY": "SECRET",
+        "FORGEJO__STORAGE__MINIO_BUCKET": "my-bucket",
+        "FORGEJO__STORAGE__MINIO_LOCATION": "us-east-1",
+        "FORGEJO__STORAGE__MINIO_BASE_PATH": "path/",
+        "FORGEJO__STORAGE__MINIO_USE_SSL": "false",
+    }
+
+
+def test_forgejo_storage_config_from_s3_info():
+    """from_s3_info maps s3-credentials relation payload keys to model fields."""
+    s3_info = {
+        "endpoint": "minio:9000",
+        "access-key": "AKID",
+        "secret-key": "SECRET",
+        "bucket": "my-bucket",
+        "region": "us-east-1",
+    }
+    cfg = ForgejoStorageConfig.from_s3_info(s3_info)
+    assert cfg.endpoint == "minio:9000"
+    assert cfg.access_key_id == "AKID"
+    assert cfg.secret_access_key == "SECRET"
+    assert cfg.bucket == "my-bucket"
+    assert cfg.location == "us-east-1"
+    assert cfg.base_path == ""  # Default value
+    assert cfg.use_ssl is True  # Default value

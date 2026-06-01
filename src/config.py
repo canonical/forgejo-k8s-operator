@@ -7,7 +7,7 @@ validating config values.
 from typing import Literal
 
 import ops
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 # Explicit env var name overrides for Juju config options
 _CONFIG_KEY_OVERRIDES: dict[str, str] = {
@@ -78,3 +78,40 @@ class ForgejoConfig(BaseModel):
     forgejo__repository__pull_request__default_merge_style: Literal[
         "merge", "rebase", "rebase-merge", "squash", "fast-forward-only"
     ]
+
+
+class ForgejoStorageConfig(BaseModel):
+    """Forgejo S3/MinIO storage settings.
+
+    Dump with `model_dump(by_alias=True)` to get the `FORGEJO__STORAGE__*`
+    mapping Forgejo expects.
+    """
+
+    storage_type: str = Field("minio", serialization_alias="FORGEJO__STORAGE__STORAGE_TYPE")
+    endpoint: str = Field("", serialization_alias="FORGEJO__STORAGE__MINIO_ENDPOINT")
+    access_key_id: str = Field("", serialization_alias="FORGEJO__STORAGE__MINIO_ACCESS_KEY_ID")
+    secret_access_key: str = Field(
+        "", serialization_alias="FORGEJO__STORAGE__MINIO_SECRET_ACCESS_KEY"
+    )
+    bucket: str = Field("forgejo", serialization_alias="FORGEJO__STORAGE__MINIO_BUCKET")
+    location: str = Field("", serialization_alias="FORGEJO__STORAGE__MINIO_LOCATION")
+    base_path: str = Field("", serialization_alias="FORGEJO__STORAGE__MINIO_BASE_PATH")
+    use_ssl: bool = Field(True, serialization_alias="FORGEJO__STORAGE__MINIO_USE_SSL")
+
+    @field_serializer("use_ssl")
+    def _ssl_to_str(self, value: bool) -> str:
+        return "true" if value else "false"
+
+    @classmethod
+    def from_s3_info(cls, s3_info: dict[str, str]) -> "ForgejoStorageConfig":
+        """Build from the s3-credentials relation payload (note the dashed keys)."""
+        return cls(
+            storage_type=s3_info.get("storage-type", "minio"),
+            endpoint=s3_info.get("endpoint", ""),
+            access_key_id=s3_info.get("access-key", ""),
+            secret_access_key=s3_info.get("secret-key", ""),
+            bucket=s3_info.get("bucket", "forgejo"),
+            location=s3_info.get("region", ""),
+            base_path=s3_info.get("path", ""),
+            use_ssl=s3_info.get("use-ssl", "true").lower() == "true",
+        )
