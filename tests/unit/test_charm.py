@@ -124,3 +124,31 @@ def test_config_propagates_to_env_vars(monkeypatch: pytest.MonkeyPatch):
     assert env.get("FORGEJO__LOG__LEVEL") == "Debug"
     # Override mapping: dot in Forgejo section name encoded as _0X2E_
     assert env.get("FORGEJO__REPOSITORY_0X2E_PULL-REQUEST__DEFAULT_MERGE_STYLE") == "rebase"
+
+
+def test_secret_changed_triggers_reconcile(monkeypatch: pytest.MonkeyPatch):
+    """A secret_changed event causes the charm to reconcile and pick up new secret content."""
+    ctx = testing.Context(CharmForgejoCharm)
+    container_in = testing.Container(
+        "forgejo",
+        can_connect=True,
+        layers={"base": layer},
+        service_statuses={SERVICE_NAME: pebble.ServiceStatus.INACTIVE},
+    )
+    secret = testing.Secret(
+        tracked_content={"value": "old-key"},
+        latest_content={"value": "new-rotated-key"},
+    )
+    state_in = testing.State(
+        containers={container_in},
+        secrets={secret},
+        config={"forgejo__security__secret_key": secret.id},
+    )
+    monkeypatch.setattr(
+        CharmForgejoCharm, "_forgejo_version", property(lambda self: mock_get_version())
+    )
+
+    state_out = ctx.run(ctx.on.secret_changed(secret=secret), state_in)
+    env = state_out.get_container("forgejo").plan.services[SERVICE_NAME].environment
+    # After secret_changed, get_content(refresh=True) returns the latest revision
+    assert env.get("FORGEJO__SECURITY__SECRET_KEY") == "new-rotated-key"

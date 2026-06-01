@@ -75,6 +75,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         framework.observe(self.on.config_changed, self._on_config_changed)
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
         framework.observe(getattr(self.on, "data_storage_attached"), self._on_storage_attached)
+        framework.observe(self.on.secret_changed, self._on_secret_changed)
 
         # actions - actions.py handlers
         framework.observe(self.on.generate_runner_secret_action, self._on_generate_runner_secret)
@@ -247,6 +248,9 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         return env
 
     def _on_config_changed(self, e: ops.ConfigChangedEvent):
+        self.reconcile(e)
+
+    def _on_secret_changed(self, e: ops.SecretChangedEvent) -> None:
         self.reconcile(e)
 
     def reconcile(self, _: ops.EventBase) -> None:

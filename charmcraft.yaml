@@ -360,6 +360,18 @@ config:
       description: Show Forgejo and Go version information in the footer.
       default: true
       type: boolean
+    forgejo__security__secret_key:
+      description: |
+        Juju secret holding the Forgejo SECRET_KEY.
+      type: secret
+    forgejo__security__internal_token:
+      description: |
+        Juju secret holding the Forgejo INTERNAL_TOKEN.
+      type: secret
+    forgejo__server__lfs_jwt_secret:
+      description: |
+        Juju secret holding the Forgejo LFS_JWT_SECRET.
+      type: secret
 
 assumes:
   - juju >= 3.5
