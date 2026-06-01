@@ -23,7 +23,7 @@ from actions import (
     on_reset_user_password,
 )
 from certificates import CertHandler
-from config import ForgejoConfig, map_config_to_env_vars
+from config import ForgejoConfig, ForgejoStorageConfig, map_config_to_env_vars
 from constants import (
     CUSTOM_FORGEJO_CONFIG_FILE,
     ENVIRONMENT_TO_INI,
@@ -367,15 +367,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         s3_info = self.s3_client.get_s3_connection_info()
         if not s3_info:
             return {}
-        return {
-            "FORGEJO__STORAGE__STORAGE_TYPE": "minio",
-            "FORGEJO__STORAGE__MINIO_ENDPOINT": s3_info.get("endpoint", ""),
-            "FORGEJO__STORAGE__MINIO_ACCESS_KEY_ID": s3_info.get("access-key", ""),
-            "FORGEJO__STORAGE__MINIO_SECRET_ACCESS_KEY": s3_info.get("secret-key", ""),
-            "FORGEJO__STORAGE__MINIO_BUCKET": s3_info.get("bucket", "forgejo"),
-            "FORGEJO__STORAGE__MINIO_LOCATION": s3_info.get("region", ""),
-            "FORGEJO__STORAGE__MINIO_USE_SSL": "true",
-        }
+        return ForgejoStorageConfig.from_s3_info(s3_info).model_dump(by_alias=True)
 
     def _on_certificates_available(self, event: ops.EventBase) -> None:
         """Handle new/updated TLS certificate - switch Forgejo to HTTPS."""
