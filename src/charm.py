@@ -21,7 +21,12 @@ from actions import (
     on_reset_user_password,
 )
 from certificates import CertHandler
-from config import ForgejoConfig, ForgejoStorageConfig, map_config_to_env_vars
+from config import (
+    ForgejoConfig,
+    ForgejoStorageConfig,
+    TraefikSSHConfig,
+    map_config_to_env_vars,
+)
 from constants import (
     CUSTOM_FORGEJO_CONFIG_FILE,
     ENVIRONMENT_TO_INI,
@@ -34,7 +39,7 @@ from constants import (
     PORT,
     SERVICE_NAME,
 )
-from ingress import get_traefik_route_config
+from ingress import get_ssh_static_config, get_traefik_route_config
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +111,11 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         )
         framework.observe(self.database.on.database_created, self.reconcile)
         framework.observe(self.database.on.endpoints_changed, self.reconcile)
+
+        # ingress support
+        framework.observe(self.on["ingress"].relation_changed, self.reconcile)
+        framework.observe(self.on["ingress"].relation_departed, self.reconcile)
+        framework.observe(self.on["ingress"].relation_broken, self.reconcile)
 
         # S3 storage support
         self.s3_client = S3Requirer(self, relation_name="s3-credentials", bucket_name="forgejo")
@@ -254,6 +264,10 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         # has explicitly set them via Juju config (empty string = use computed value).
         if not self.config.get("forgejo__server__root_url", ""):
             env["FORGEJO__SERVER__ROOT_URL"] = f"{protocol}://{domain}/"
+
+        ingress_cfg = TraefikSSHConfig.from_charm_config(self.config)
+        if ingress_cfg.ssh_enabled:
+            env["FORGEJO__SERVER__START_SSH_SERVER"] = "true"
         if tls_ready:
             env["FORGEJO__SERVER__PROTOCOL"] = "https"
             env["FORGEJO__SERVER__CERT_FILE"] = self.cert_handler.cert_path
@@ -292,6 +306,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             domain = config.forgejo__server__domain
             protocol = "https" if tls_ready else "http"
 
+            self.set_ports()
             self._configure_ingress(domain, tls_ready)
 
             additional_env = self._build_additional_env(domain, protocol, tls_ready)
@@ -312,9 +327,22 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         if not domain:
             logger.error("No domain set in charm")
             return
+        ingress_cfg = TraefikSSHConfig.from_charm_config(self.config)
         logger.info(f"Config domain {domain} is valid, submitting traefik route")
         self.ingress.submit_to_traefik(
-            get_traefik_route_config(self.model.name, self.app.name, domain, PORT, tls_ready)
+            get_traefik_route_config(
+                self.model.name,
+                self.app.name,
+                domain,
+                PORT,
+                tls_ready,
+                ingress_cfg.ssh_enabled,
+                ingress_cfg.ssh_port,
+                ingress_cfg.ssh_listen_port,
+            ),
+            static=get_ssh_static_config(ingress_cfg.ssh_port)
+            if ingress_cfg.ssh_enabled
+            else None,
         )
 
     def _apply_pebble_layer(self, env_vars: dict) -> None:
@@ -341,9 +369,10 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
     def set_ports(self):
         """Open necessary (and close no longer needed) workload ports."""
-        planned_ports = {
-            ops.model.OpenedPort("tcp", PORT),
-        }
+        ingress_cfg = TraefikSSHConfig.from_charm_config(self.config)
+        planned_ports = {ops.model.OpenedPort("tcp", PORT)}
+        if ingress_cfg.ssh_enabled:
+            planned_ports.add(ops.model.OpenedPort("tcp", ingress_cfg.ssh_listen_port))
         actual_ports = self.unit.opened_ports()
 
         # Ports may change across an upgrade, so need to sync
