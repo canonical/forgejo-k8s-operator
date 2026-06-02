@@ -1,6 +1,3 @@
-# Copyright 2025 Nishant Dash
-# See LICENSE file for licensing details.
-
 """TLS certificate handling for the Forgejo K8s charm."""
 
 import logging

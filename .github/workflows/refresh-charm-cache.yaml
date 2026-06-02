@@ -1,0 +1,15 @@
+name: Refresh Charm Cache
+
+on:
+  schedule:
+    - cron: '0 0 */6 * *' # Every ~6 days at 00:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    uses: canonical/launchpad-actions/.github/workflows/refresh-charm-cache.yaml@main
+    with:
+      charm_path: "."

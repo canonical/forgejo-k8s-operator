@@ -1,0 +1,9 @@
+name: Prek
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  prek:
+    uses: canonical/launchpad-actions/.github/workflows/prek.yaml@main
