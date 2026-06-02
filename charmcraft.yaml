@@ -90,7 +90,6 @@ resources:
   forgejo-image:
     type: oci-image
     description: OCI image for the Forgejo container
-    upstream-source: codeberg.org/forgejo/forgejo:14
 
 parts:
   charm:

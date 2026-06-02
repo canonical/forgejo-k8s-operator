@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-DEFAULT_FORGEJO_IMAGE = "codeberg.org/forgejo/forgejo:14"
+DEFAULT_FORGEJO_IMAGE = "codeberg.org/forgejo/forgejo:15"
 
 
 def pytest_addoption(parser):
