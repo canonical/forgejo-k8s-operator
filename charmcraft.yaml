@@ -372,6 +372,10 @@ config:
       description: |
         Juju secret holding the Forgejo LFS_JWT_SECRET.
       type: secret
+    forgejo__metrics__token:
+      description: |
+        Juju secret holding the bearer token for the Forgejo /metrics endpoint.
+      type: secret
 
 assumes:
   - juju >= 3.5

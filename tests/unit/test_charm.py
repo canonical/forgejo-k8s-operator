@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 #
 # To learn more about testing, see https://ops.readthedocs.io/en/latest/explanation/testing.html
-
+import json
 
 import pytest
 from ops import pebble, testing
@@ -124,6 +124,53 @@ def test_config_propagates_to_env_vars(monkeypatch: pytest.MonkeyPatch):
     assert env.get("FORGEJO__LOG__LEVEL") == "Debug"
     # Override mapping: dot in Forgejo section name encoded as _0X2E_
     assert env.get("FORGEJO__REPOSITORY_0X2E_PULL-REQUEST__DEFAULT_MERGE_STYLE") == "rebase"
+
+
+def test_metrics_scrape_jobs_no_token(monkeypatch: pytest.MonkeyPatch):
+    """Scrape jobs contain no authorization when no metrics token is configured."""
+    ctx = testing.Context(CharmForgejoCharm)
+    container_in = testing.Container("forgejo", can_connect=True)
+    metrics_relation = testing.Relation("metrics-endpoint")
+    state_in = testing.State(
+        containers={container_in},
+        relations={metrics_relation},
+        leader=True,
+    )
+    monkeypatch.setattr(
+        CharmForgejoCharm, "_forgejo_version", property(lambda self: mock_get_version())
+    )
+
+    state_out = ctx.run(ctx.on.config_changed(), state_in)
+
+    rel_out = state_out.get_relation(metrics_relation.id)
+    scrape_jobs = json.loads(rel_out.local_app_data.get("scrape_jobs", "[]"))
+    assert len(scrape_jobs) == 1
+    assert "authorization" not in scrape_jobs[0]
+
+
+def test_metrics_scrape_jobs_with_token(monkeypatch: pytest.MonkeyPatch):
+    """Scrape jobs include bearer-token authorization when the token secret is configured."""
+    ctx = testing.Context(CharmForgejoCharm)
+    container_in = testing.Container("forgejo", can_connect=True)
+    metrics_relation = testing.Relation("metrics-endpoint")
+    secret = testing.Secret(tracked_content={"value": "my-metrics-token"})
+    state_in = testing.State(
+        containers={container_in},
+        relations={metrics_relation},
+        secrets={secret},
+        config={"forgejo__metrics__token": secret.id},
+        leader=True,
+    )
+    monkeypatch.setattr(
+        CharmForgejoCharm, "_forgejo_version", property(lambda self: mock_get_version())
+    )
+
+    state_out = ctx.run(ctx.on.config_changed(), state_in)
+
+    rel_out = state_out.get_relation(metrics_relation.id)
+    scrape_jobs = json.loads(rel_out.local_app_data.get("scrape_jobs", "[]"))
+    assert len(scrape_jobs) == 1
+    assert scrape_jobs[0].get("authorization") == {"credentials": "my-metrics-token"}
 
 
 def test_secret_changed_triggers_reconcile(monkeypatch: pytest.MonkeyPatch):
