@@ -30,3 +30,8 @@ repos:
       - id: codespell
         additional_dependencies: [tomli]
         args: [--toml, pyproject.toml]
+
+  - repo: https://github.com/woodruffw/zizmor-pre-commit
+    rev: v1.16.1
+    hooks:
+      - id: zizmor
