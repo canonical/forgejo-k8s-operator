@@ -19,4 +19,4 @@ jobs:
     uses: canonical/launchpad-actions/.github/workflows/janitor.yaml@main
     with:
       dry_run: ${{ github.event.inputs.dry_run || 'false' }}
-      keep_workflows: "pipeline.yaml,pre-commit.yaml"
+      keep_workflows: "pipeline.yaml,prek.yaml"
