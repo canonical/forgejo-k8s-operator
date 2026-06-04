@@ -1,4 +1,4 @@
-ops ~= 2.17
-cosl
-cryptography
-pydantic
+ops ~= 3.7
+cosl ~= 1.9
+cryptography ~= 48.0
+pydantic ~= 2.13
