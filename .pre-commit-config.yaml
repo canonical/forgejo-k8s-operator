@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -8,30 +8,30 @@ repos:
       - id: check-added-large-files
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.11
+    rev: v0.15.15
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
 
   - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.409
+    rev: v1.1.410
     hooks:
       - id: pyright
         additional_dependencies:
-          - "ops[testing]~=2.17"
+          - "ops[testing]~=3.7"
           - cosl
           - cryptography
         pass_filenames: false
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.1
+    rev: v2.4.2
     hooks:
       - id: codespell
         additional_dependencies: [tomli]
         args: [--toml, pyproject.toml]
 
   - repo: https://github.com/woodruffw/zizmor-pre-commit
-    rev: v1.16.1
+    rev: v1.25.2
     hooks:
       - id: zizmor
