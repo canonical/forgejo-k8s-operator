@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# Copyright 2025 Nishant Dash
-# See LICENSE file for licensing details.
 
 import logging
 import secrets
@@ -22,7 +20,7 @@ APP_NAME = METADATA["name"]
 
 
 @pytest_asyncio.fixture(scope="module")
-async def deployed_app(ops_test: OpsTest):
+async def deployed_app(ops_test: OpsTest, forgejo_image):
     """Build and deploy the full charm stack; yield the forgejo-k8s Application object."""
     local_src = ops_test.tmp_path / "charm-src"
     if not local_src.exists():
@@ -34,7 +32,7 @@ async def deployed_app(ops_test: OpsTest):
         )
 
     charm = await ops_test.build_charm(local_src)
-    resources = {"forgejo-image": METADATA["resources"]["forgejo-image"]["upstream-source"]}
+    resources = {"forgejo-image": forgejo_image}
 
     await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME)
 

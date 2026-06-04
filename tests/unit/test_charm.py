@@ -1,7 +1,5 @@
-# Copyright 2025 Nishant Dash
-# See LICENSE file for licensing details.
-#
 # To learn more about testing, see https://ops.readthedocs.io/en/latest/explanation/testing.html
+
 import json
 
 import pytest

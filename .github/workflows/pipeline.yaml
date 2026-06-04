@@ -1,0 +1,77 @@
+name: Pipeline
+
+run-name: Pipeline (${{ inputs.channel }}) - ${{ inputs.commit_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Charmhub channel
+        type: string
+        default: edge
+      upstream_url:
+        description: Upstream repository to clone and build
+        type: string
+        required: true
+        default: https://codeberg.org/forgejo/forgejo.git
+      upstream_branch:
+        description: Upstream branch to clone and build
+        type: string
+        required: true
+        default: forgejo
+      upstream_sha:
+        description: Upstream commit SHA to run on
+        type: string
+        required: true
+      commit_sha:
+        description: This repo commit SHA to run on
+        type: string
+        required: true
+        default: ${{ github.sha }}
+      charm_name:
+        description: Name of the charm to release
+        type: string
+        required: true
+        default: forgejo-k8s
+      resource_name:
+        description: Name of the resource to release
+        type: string
+        required: true
+        default: forgejo-image
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yaml
+    with:
+      commit_sha: ${{ inputs.commit_sha }}
+
+  oci-image:
+    permissions:
+      contents: read
+      packages: write
+    uses: canonical/launchpad-actions/.github/workflows/oci-image.yaml@main
+    with:
+      repo_url: ${{ inputs.upstream_url }}
+      repo_branch: ${{ inputs.upstream_branch }}
+      commit_sha: ${{ inputs.upstream_sha }}
+
+  charm:
+    uses: canonical/launchpad-actions/.github/workflows/build-charm.yaml@main
+    secrets: inherit # zizmor: ignore[secrets-inherit]
+    with:
+      commit_sha: ${{ inputs.commit_sha }}
+      charm_path: "."
+
+  release:
+    needs: [oci-image, charm]
+    uses: canonical/launchpad-actions/.github/workflows/release-charm.yaml@main
+    secrets: inherit # zizmor: ignore[secrets-inherit]
+    with:
+      charm_cache_hit: ${{ needs.charm.outputs.cache_hit }}
+      commit_sha: ${{ inputs.upstream_sha }}
+      channel: ${{ inputs.channel }}
+      charm_name: ${{ inputs.charm_name }}
+      resource_name: ${{ inputs.resource_name }}
