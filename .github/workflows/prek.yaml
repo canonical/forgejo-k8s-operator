@@ -8,4 +8,4 @@ permissions: read-all
 
 jobs:
   prek:
-    uses: canonical/launchpad-actions/.github/workflows/prek.yaml@main
+    uses: canonical/launchpad-actions/.github/workflows/prek.yaml@bb58903c9ab6fed38da23a5b35a3cf294e82d4a4

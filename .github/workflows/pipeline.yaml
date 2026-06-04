@@ -51,14 +51,14 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: canonical/launchpad-actions/.github/workflows/oci-image.yaml@main
+    uses: canonical/launchpad-actions/.github/workflows/oci-image.yaml@bb58903c9ab6fed38da23a5b35a3cf294e82d4a4
     with:
       repo_url: ${{ inputs.upstream_url }}
       repo_branch: ${{ inputs.upstream_branch }}
       commit_sha: ${{ inputs.upstream_sha }}
 
   charm:
-    uses: canonical/launchpad-actions/.github/workflows/build-charm.yaml@main
+    uses: canonical/launchpad-actions/.github/workflows/build-charm.yaml@bb58903c9ab6fed38da23a5b35a3cf294e82d4a4
     secrets: inherit # zizmor: ignore[secrets-inherit]
     with:
       commit_sha: ${{ inputs.commit_sha || github.sha }}
@@ -66,7 +66,7 @@ jobs:
 
   release:
     needs: [oci-image, charm]
-    uses: canonical/launchpad-actions/.github/workflows/release-charm.yaml@main
+    uses: canonical/launchpad-actions/.github/workflows/release-charm.yaml@bb58903c9ab6fed38da23a5b35a3cf294e82d4a4
     secrets: inherit # zizmor: ignore[secrets-inherit]
     with:
       charm_cache_hit: ${{ needs.charm.outputs.cache_hit }}
