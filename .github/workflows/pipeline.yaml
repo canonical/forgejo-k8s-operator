@@ -26,8 +26,7 @@ on:
       commit_sha:
         description: This repo commit SHA to run on
         type: string
-        required: true
-        default: ${{ github.sha }}
+        required: false
       charm_name:
         description: Name of the charm to release
         type: string
@@ -46,7 +45,7 @@ jobs:
   tests:
     uses: ./.github/workflows/tests.yaml
     with:
-      commit_sha: ${{ inputs.commit_sha }}
+      commit_sha: ${{ inputs.commit_sha || github.sha }}
 
   oci-image:
     permissions:
@@ -62,7 +61,7 @@ jobs:
     uses: canonical/launchpad-actions/.github/workflows/build-charm.yaml@main
     secrets: inherit # zizmor: ignore[secrets-inherit]
     with:
-      commit_sha: ${{ inputs.commit_sha }}
+      commit_sha: ${{ inputs.commit_sha || github.sha }}
       charm_path: "."
 
   release:
