@@ -20,8 +20,9 @@ repos:
       - id: pyright
         additional_dependencies:
           - "ops[testing]~=3.7"
-          - cosl
-          - cryptography
+          - "cosl~=1.9"
+          - "cryptography~=48.0"
+          - "pydantic~=2.13"
         pass_filenames: false
 
   - repo: https://github.com/codespell-project/codespell
