@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   cleanup:
-    uses: canonical/launchpad-actions/.github/workflows/janitor.yaml@22042cbf700109723b206042f77bdcf134a26a52
+    uses: canonical/launchpad-actions/.github/workflows/janitor.yaml@69c806b0960935a6307170f6621a72e7d4720581
     with:
       dry_run: ${{ inputs.dry_run }}
       keep_workflows: "pipeline.yaml,prek.yaml"
