@@ -222,7 +222,14 @@ config:
       type: int
     forgejo__server__ssh_port:
       description: SSH port exposed to users for Git-over-SSH.
-      default: 22
+      default: 2222
+      type: int
+    forgejo__server__ssh_listen_port:
+      description: |
+        Internal port the built-in SSH server binds to inside the container.
+
+        Must be >1024 if Forgejo runs as a non-privileged user.
+      default: 2222
       type: int
     forgejo__server__lfs_start_server:
       description: Enable the built-in Git LFS server.

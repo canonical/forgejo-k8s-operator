@@ -138,3 +138,22 @@ class ForgejoStorageConfig(BaseModel):
             base_path=s3_info.get("path", ""),
             use_ssl=s3_info.get("use-ssl", "true").lower() == "true",
         )
+
+
+class TraefikSSHConfig(BaseModel):
+    """SSH-related Traefik ingress settings read from charm config."""
+
+    model_config = ConfigDict(frozen=True)
+
+    ssh_enabled: bool
+    ssh_port: int
+    ssh_listen_port: int
+
+    @classmethod
+    def from_charm_config(cls, config: ops.ConfigData) -> "TraefikSSHConfig":
+        """Build from the charm's live config."""
+        return cls(
+            ssh_enabled=not bool(config.get("forgejo__server__disable_ssh", False)),
+            ssh_port=int(config.get("forgejo__server__ssh_port", 2222)),
+            ssh_listen_port=int(config.get("forgejo__server__ssh_listen_port", 2222)),
+        )
