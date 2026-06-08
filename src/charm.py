@@ -401,11 +401,9 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             if not data:
                 continue
             logger.info("New database endpoint is %s", data["endpoints"])
-            host, port = data["endpoints"].split(":")
             db_data = {
                 "FORGEJO__DATABASE__DB_TYPE": "postgres",
-                "FORGEJO__DATABASE__HOST": host,
-                "FORGEJO__DATABASE__PORT": port,
+                "FORGEJO__DATABASE__HOST": data["endpoints"],
                 "FORGEJO__DATABASE__NAME": self.database_name,
                 "FORGEJO__DATABASE__USER": data["username"],
                 "FORGEJO__DATABASE__PASSWD": data["password"],
