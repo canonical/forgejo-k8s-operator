@@ -337,10 +337,9 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 PORT,
                 tls_ready,
                 ingress_cfg.ssh_enabled,
-                ingress_cfg.ssh_port,
                 ingress_cfg.ssh_listen_port,
             ),
-            static=get_ssh_static_config(ingress_cfg.ssh_port)
+            static=get_ssh_static_config(ingress_cfg.ssh_listen_port)
             if ingress_cfg.ssh_enabled
             else None,
         )
