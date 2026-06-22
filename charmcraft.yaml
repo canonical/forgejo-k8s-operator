@@ -266,6 +266,10 @@ config:
       description: Require email confirmation before account activation.
       default: false
       type: boolean
+    forgejo__service__register_manual_confirm:
+      description: Require manual admin confirmation before a new account is activated.
+      default: false
+      type: boolean
     forgejo__service__enable_notify_mail:
       description: Send email notifications for issue and pull-request activity.
       default: false
