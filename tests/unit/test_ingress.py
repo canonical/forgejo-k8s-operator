@@ -75,13 +75,6 @@ def test_ssh_service_address_custom_listen_port():
     assert service["loadBalancer"]["servers"][0]["address"] == f"{K8S}:3022"
 
 
-def test_ssh_service_address_external_port_does_not_affect_backend():
-    """ssh_port is for the Traefik entrypoint/clone URLs, not the backend address."""
-    config = get_traefik_route_config(MODEL, APP, DOMAIN, PORT, ssh_port=22, ssh_listen_port=2222)
-    service = config["tcp"]["services"][f"{MODEL}-{APP}-ssh-service"]
-    assert service["loadBalancer"]["servers"][0]["address"] == f"{K8S}:2222"
-
-
 # SSH disabled
 def test_ssh_disabled_no_tcp_section_in_http_mode():
     config = get_traefik_route_config(MODEL, APP, DOMAIN, PORT, ssh_enabled=False)
@@ -105,9 +98,7 @@ def test_ssh_disabled_tls_still_has_tls_router():
 
 # TLS + SSH combined
 def test_tls_and_ssh_both_in_tcp_section():
-    config = get_traefik_route_config(
-        MODEL, APP, DOMAIN, PORT, tls_enabled=True, ssh_enabled=True, ssh_port=22
-    )
+    config = get_traefik_route_config(MODEL, APP, DOMAIN, PORT, tls_enabled=True, ssh_enabled=True)
     routers = config["tcp"]["routers"]
     services = config["tcp"]["services"]
     assert f"{MODEL}-{APP}-router" in routers

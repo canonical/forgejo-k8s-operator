@@ -87,7 +87,6 @@ def get_traefik_route_config(
     port: int,
     tls_enabled: bool = False,
     ssh_enabled: bool = True,
-    ssh_port: int = 2222,
     ssh_listen_port: int = 2222,
 ) -> dict:
     """Build a Traefik route configuration for Forgejo.
@@ -98,8 +97,8 @@ def get_traefik_route_config(
     HTTP mode: standard HTTP router forwarding to Forgejo.
     TLS mode: TCP TLS-passthrough router so Forgejo terminates TLS.
     SSH mode: plain TCP router forwarding to Forgejo's SSH listener.
-      The Traefik entrypoint listens on *ssh_port* (external, user-facing) and
-      forwards to the backend on *ssh_listen_port* (internal container port).
+      The Traefik entrypoint listens on *ssh_listen_port* and forwards to the
+      backend on the same port (internal container port).
       Added to the config whenever *ssh_enabled* is True.
     """
     prefix = f"{model_name}-{app_name}"
