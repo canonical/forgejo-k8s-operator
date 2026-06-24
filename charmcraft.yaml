@@ -101,6 +101,15 @@ parts:
 
 config:
   options:
+    database-default-query-exec-mode:
+      description: |
+        Sets the pgx driver query execution mode for the PostgreSQL connection.
+
+        Leave empty to use the pgx default (cache_statement).
+        Valid values: cache_statement, cache_describe, describe_exec, exec,
+        simple_protocol.
+      default: ""
+      type: string
     forgejo__log__level:
       description: |
         Configures the log level of Forgejo.
