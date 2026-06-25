@@ -400,10 +400,13 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             if not data:
                 continue
             logger.info("New database endpoint is %s", data["endpoints"])
+            db_name = self.database_name
+            if exec_mode := self.config.get("database-default-query-exec-mode"):
+                db_name = f"{db_name}?default_query_exec_mode={exec_mode}"
             db_data = {
                 "FORGEJO__DATABASE__DB_TYPE": "postgres",
                 "FORGEJO__DATABASE__HOST": data["endpoints"],
-                "FORGEJO__DATABASE__NAME": self.database_name,
+                "FORGEJO__DATABASE__NAME": db_name,
                 "FORGEJO__DATABASE__USER": data["username"],
                 "FORGEJO__DATABASE__PASSWD": data["password"],
                 "FORGEJO__DATABASE__SCHEMA": "",

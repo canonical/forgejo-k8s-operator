@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from ops import pebble, testing
 
 from charm import SERVICE_NAME
@@ -197,3 +198,59 @@ def test_secret_changed_triggers_reconcile(monkeypatch: pytest.MonkeyPatch):
     env = state_out.get_container("forgejo").plan.services[SERVICE_NAME].environment
     # After secret_changed, get_content(refresh=True) returns the latest revision
     assert env.get("FORGEJO__SECURITY__SECRET_KEY") == "new-rotated-key"
+
+
+_MOCK_DB_DATA = {
+    1: {"endpoints": "host:5432", "username": "user", "password": "pass"},
+}
+
+
+def test_database_name_plain_when_exec_mode_unset(monkeypatch: pytest.MonkeyPatch):
+    """FORGEJO__DATABASE__NAME is the plain database name when exec mode config is empty."""
+    ctx = testing.Context(CharmForgejoCharm)
+    container_in = testing.Container(
+        "forgejo",
+        can_connect=True,
+        layers={"base": layer},
+        service_statuses={SERVICE_NAME: pebble.ServiceStatus.INACTIVE},
+    )
+    state_in = testing.State(containers={container_in})
+    monkeypatch.setattr(
+        CharmForgejoCharm, "_forgejo_version", property(lambda self: mock_get_version())
+    )
+    monkeypatch.setattr(DatabaseRequires, "fetch_relation_data", lambda self, **kw: _MOCK_DB_DATA)
+
+    state_out = ctx.run(ctx.on.config_changed(), state_in)
+    env = state_out.get_container("forgejo").plan.services[SERVICE_NAME].environment
+    db_name = env.get("FORGEJO__DATABASE__NAME")
+
+    assert isinstance(db_name, str), "DATABASE NAME must be a string, not a tuple"
+    assert "?" not in db_name, "No query parameters expected when exec mode is not configured"
+
+
+def test_database_name_includes_exec_mode_when_configured(monkeypatch: pytest.MonkeyPatch):
+    """FORGEJO__DATABASE__NAME includes ?default_query_exec_mode when config is set."""
+    ctx = testing.Context(CharmForgejoCharm)
+    container_in = testing.Container(
+        "forgejo",
+        can_connect=True,
+        layers={"base": layer},
+        service_statuses={SERVICE_NAME: pebble.ServiceStatus.INACTIVE},
+    )
+    state_in = testing.State(
+        containers={container_in},
+        config={"database-default-query-exec-mode": "cache_describe"},
+    )
+    monkeypatch.setattr(
+        CharmForgejoCharm, "_forgejo_version", property(lambda self: mock_get_version())
+    )
+    monkeypatch.setattr(DatabaseRequires, "fetch_relation_data", lambda self, **kw: _MOCK_DB_DATA)
+
+    state_out = ctx.run(ctx.on.config_changed(), state_in)
+    env = state_out.get_container("forgejo").plan.services[SERVICE_NAME].environment
+    db_name = env.get("FORGEJO__DATABASE__NAME")
+
+    assert isinstance(db_name, str), "DATABASE NAME must be a string, not a tuple"
+    assert db_name.endswith("?default_query_exec_mode=cache_describe"), (
+        f"Expected pgx exec mode parameter in DATABASE NAME, got: {db_name!r}"
+    )
