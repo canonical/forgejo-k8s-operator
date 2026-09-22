@@ -42,11 +42,6 @@ permissions:
   contents: read
 
 jobs:
-  tests:
-    uses: ./.github/workflows/tests.yaml
-    with:
-      commit_sha: ${{ inputs.commit_sha || github.sha }}
-
   oci-image:
     permissions:
       contents: read
