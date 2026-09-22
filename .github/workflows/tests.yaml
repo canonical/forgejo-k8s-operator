@@ -66,56 +66,12 @@ jobs:
       - name: Prepare runner (microk8s, juju, charmcraft)
         run: sudo concierge prepare -p microk8s
 
-      - name: Wait for MicroK8s addons to settle (dns, metallb)
+      - name: Wait for MicroK8s addons to settle (dns)
         run: |
           set -euo pipefail
           sudo microk8s status --wait-ready --timeout 300
-
-          echo "Waiting for metallb-system pods to appear..."
-          for i in $(seq 1 60); do
-            if [ "$(sudo microk8s kubectl get pods -n metallb-system --no-headers 2>/dev/null | wc -l)" -gt 0 ]; then
-              break
-            fi
-            sleep 5
-          done
-          sudo microk8s kubectl wait --for=condition=Ready pod --all -n metallb-system --timeout=300s
           sudo microk8s kubectl wait --for=condition=Ready pod -l k8s-app=kube-dns -n kube-system --timeout=300s
-
-          sudo microk8s kubectl get pods -n metallb-system -o wide
           sudo microk8s kubectl get pods -n kube-system -l k8s-app=kube-dns -o wide
-
-      - name: Reconfigure MetalLB with a runner-derived IP range
-        run: |
-          set -euo pipefail
-
-          # concierge's microk8s preset enables MetalLB with a hard-coded
-          # pool (10.64.140.43-49) that isn't guaranteed to be free/usable
-          # on every GH runner. Re-enable it with a range derived from the
-          # runner's own default-route interface so it's always valid here,
-          # then wait for MetalLB to actually finish creating its CRs
-          # before Juju starts deploying anything that depends on it.
-          default_if=$(ip route show default | awk '{print $5; exit}')
-          ip_addr=$(ip -4 addr show "$default_if" | grep -oP 'inet \K[\d.]+' | head -n1)
-          prefix=$(echo "$ip_addr" | cut -d. -f1-3)
-          range="${prefix}.240-${prefix}.250"
-          echo "Using MetalLB range: $range (derived from $default_if / $ip_addr)"
-
-          sudo microk8s disable metallb || true
-          sudo microk8s enable metallb:"$range"
-
-          echo "Waiting for MetalLB CRs (IPAddressPool, L2Advertisement) to be created..."
-          for i in $(seq 1 60); do
-            pools="$(sudo microk8s kubectl get ipaddresspools -n metallb-system --no-headers 2>/dev/null | wc -l)"
-            advs="$(sudo microk8s kubectl get l2advertisements -n metallb-system --no-headers 2>/dev/null | wc -l)"
-            if [ "$pools" -gt 0 ] && [ "$advs" -gt 0 ]; then
-              break
-            fi
-            sleep 5
-          done
-
-          sudo microk8s kubectl get ipaddresspools,l2advertisements -n metallb-system -o wide
-          sudo microk8s kubectl wait --for=condition=Ready pod --all -n metallb-system --timeout=300s
-          sudo microk8s kubectl get pods -n metallb-system -o wide
 
       - name: Install tox
         run: |
