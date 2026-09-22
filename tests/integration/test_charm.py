@@ -100,24 +100,55 @@ def test_metrics_bearer_token(deployed_app, juju: jubilant.Juju):
     juju.wait(lambda status: jubilant.all_active(status, APP_NAME), timeout=120)
 
 
-def _get_traefik_lb_ip(model: str, app_name: str = "traefik-k8s") -> str:
-    """Return the MetalLB LoadBalancer external IP for the traefik-k8s-lb service."""
-    result = subprocess.run(
-        [
-            "kubectl",
-            "get",
-            "service",
-            f"{app_name}-lb",
-            "-n",
-            model,
-            "-o",
-            "jsonpath={.status.loadBalancer.ingress[0].ip}",
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout.strip()
+def _dump_metallb_diagnostics(model: str) -> None:
+    """Log MetalLB/Traefik state to help diagnose LB-IP-assignment failures in CI."""
+    commands = [
+        ["juju", "status", "--model", model],
+        ["kubectl", "get", "svc", "traefik-k8s-lb", "-n", model, "-o", "yaml"],
+        ["kubectl", "get", "pods", "-n", "metallb-system", "-o", "wide"],
+        ["kubectl", "get", "ipaddresspools,l2advertisements", "-A"],
+    ]
+    for cmd in commands:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        logger.error("$ %s\n%s%s", " ".join(cmd), result.stdout, result.stderr)
+
+
+def _get_traefik_lb_ip(
+    model: str, app_name: str = "traefik-k8s", timeout: int = 60, interval: int = 5
+) -> str:
+    """Return the MetalLB LoadBalancer external IP for the traefik-k8s-lb service.
+
+    Retries for up to `timeout` seconds: the Service's status field can lag a few
+    seconds behind the unit reporting active, so a single immediate lookup can be
+    flaky even when MetalLB is working correctly.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        result = subprocess.run(
+            [
+                "kubectl",
+                "get",
+                "service",
+                f"{app_name}-lb",
+                "-n",
+                model,
+                "-o",
+                "jsonpath={.status.loadBalancer.ingress[0].ip}",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        ip = result.stdout.strip()
+        if ip:
+            return ip
+        if time.monotonic() >= deadline:
+            _dump_metallb_diagnostics(model)
+            raise TimeoutError(
+                f"MetalLB never assigned a LoadBalancer IP to {app_name}-lb "
+                f"in {model} after {timeout}s"
+            )
+        time.sleep(interval)
 
 
 def _wait_for_ssh_banner(host: str, port: int, timeout: int = 300, interval: int = 5) -> None:
@@ -142,16 +173,27 @@ def deployed_app_with_traefik(deployed_app, juju: jubilant.Juju):
     juju.deploy("traefik-k8s", channel="latest/stable", trust=True)
     juju.integrate(f"{APP_NAME}:ingress", "traefik-k8s:traefik-route")
 
-    juju.wait(
-        lambda status: jubilant.all_active(status, APP_NAME, "postgresql-k8s", "traefik-k8s"),
-        timeout=600,
-    )
+    try:
+        juju.wait(
+            lambda status: jubilant.all_active(status, APP_NAME, "postgresql-k8s", "traefik-k8s"),
+            timeout=600,
+        )
+    except (TimeoutError, jubilant.WaitError):
+        # Most commonly caused by MetalLB failing to assign traefik-k8s an
+        # external IP (unit stuck cycling blocked/maintenance); dump state
+        # to make that diagnosable from the CI log.
+        _dump_metallb_diagnostics(juju.model)
+        raise
 
     traefik_ip = _get_traefik_lb_ip(juju.model)
     logger.info("Traefik LoadBalancer IP: %s", traefik_ip)
 
     # Wait until Traefik is routing SSH to Forgejo (banner proves dynamic route is configured)
-    _wait_for_ssh_banner(traefik_ip, SSH_EXTERNAL_PORT, timeout=300)
+    try:
+        _wait_for_ssh_banner(traefik_ip, SSH_EXTERNAL_PORT, timeout=300)
+    except TimeoutError:
+        _dump_metallb_diagnostics(juju.model)
+        raise
     logger.info(
         "SSH banner received on %s:%d - Traefik route is active", traefik_ip, SSH_EXTERNAL_PORT
     )
