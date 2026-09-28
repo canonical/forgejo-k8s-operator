@@ -269,14 +269,16 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         env: dict = {
             # Top-level (DEFAULT section)
             "FORGEJO____RUN_USER": "git",
+            "FORGEJO____WORK_PATH": "/data/gitea",
             # Repository root
             "FORGEJO__REPOSITORY__ROOT": "/data/gitea/data/forgejo-repositories",
+            "FORGEJO__SERVER__APP_DATA_PATH": "/data/gitea/data",
             **self._get_proxy_env(),
             **self._fetch_postgres_relation_data(),
             **self._fetch_s3_relation_data(),
         }
-        # SSH_DOMAIN and ROOT_URL are computed from protocol+domain unless the user
-        # has explicitly set them via Juju config (empty string = use computed value).
+        # ROOT_URL is computed from protocol+domain unless the user
+        # has explicitly set it via Juju config (empty string = use computed value).
         if not self.config.get("forgejo__server__root_url", ""):
             env["FORGEJO__SERVER__ROOT_URL"] = f"{protocol}://{domain}/"
 
@@ -421,13 +423,10 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
                 )
                 continue
             logger.info("New database endpoint is %s", data["endpoints"])
-            db_name = self.database_name
-            if exec_mode := self.config.get("database-default-query-exec-mode"):
-                db_name = f"{db_name}?default_query_exec_mode={exec_mode}"
             db_data = {
                 "FORGEJO__DATABASE__DB_TYPE": "postgres",
                 "FORGEJO__DATABASE__HOST": data["endpoints"],
-                "FORGEJO__DATABASE__NAME": db_name,
+                "FORGEJO__DATABASE__NAME": self.database_name,
                 "FORGEJO__DATABASE__USER": data["username"],
                 "FORGEJO__DATABASE__PASSWD": data["password"],
                 "FORGEJO__DATABASE__SCHEMA": "",

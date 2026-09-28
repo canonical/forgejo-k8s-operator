@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 # Explicit env var name overrides for Juju config options
 _CONFIG_KEY_OVERRIDES: dict[str, str] = {
-    "forgejo__cron__update_checker__enabled": "FORGEJO__CRON_0X2E_UPDATE_CHECKER__ENABLED",
     "forgejo__repository__signing__default_trust_model": "FORGEJO__REPOSITORY_0X2E_SIGNING__DEFAULT_TRUST_MODEL",  # noqa: E501
     "forgejo__repository__pull_request__default_merge_style": "FORGEJO__REPOSITORY_0X2E_PULL-REQUEST__DEFAULT_MERGE_STYLE",  # noqa: E501
 }

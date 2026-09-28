@@ -119,15 +119,6 @@ parts:
 
 config:
   options:
-    database-default-query-exec-mode:
-      description: |
-        Sets the pgx driver query execution mode for the PostgreSQL connection.
-
-        Leave empty to use the pgx default (cache_statement).
-        Valid values: cache_statement, cache_describe, describe_exec, exec,
-        simple_protocol.
-      default: ""
-      type: string
     forgejo__log__level:
       description: |
         Configures the log level of Forgejo.
@@ -235,10 +226,6 @@ config:
         Acceptable values are "prod" or "dev".
       default: "prod"
       type: string
-    forgejo____work_path:
-      description: Top-level working directory for Forgejo data.
-      default: "/data/gitea"
-      type: string
     forgejo__lfs__path:
       description: Directory where Git LFS objects are stored.
       default: "/data/gitea/data/lfs"
@@ -267,17 +254,6 @@ config:
         Disable CDN and external avatar sources; serve all assets locally.
       default: true
       type: boolean
-    forgejo__server__app_data_path:
-      description: Directory for application data (attachments, avatars, etc.).
-      default: "/data/gitea/data"
-      type: string
-    forgejo__server__ssh_domain:
-      description: |
-        Domain shown to users for SSH clone URLs.
-
-        Leave empty to use the value of forgejo__server__domain.
-      default: ""
-      type: string
     forgejo__server__root_url:
       description: |
         Canonical root URL for Forgejo (e.g. https://git.example.com/).
@@ -309,10 +285,6 @@ config:
       description: Show a CAPTCHA on the registration form.
       default: true
       type: boolean
-    forgejo__service__default_enable_timetracking:
-      description: Enable time-tracking for new repositories by default.
-      default: true
-      type: boolean
     forgejo__service__no_reply_address:
       description: Email address used as the From address for no-reply notifications.
       default: "noreply.localhost"
@@ -329,21 +301,6 @@ config:
         Sets the cookie Domain.
       default: ""
       type: string
-    forgejo__log__mode:
-      description: Logging output mode (e.g. "console", "file").
-      default: "console"
-      type: string
-    forgejo__log__root_path:
-      description: Directory where log files are written when log mode includes "file".
-      default: "/data/gitea/log"
-      type: string
-    forgejo__security__install_lock:
-      description: |
-        Lock the installation wizard after initial setup.
-
-        Should remain true in production to prevent re-initialisation.
-      default: true
-      type: boolean
     forgejo__security__password_hash_algo:
       description: Password hashing algorithm used for new accounts.
       default: "pbkdf2_hi"
@@ -354,18 +311,6 @@ config:
       type: boolean
     forgejo__metrics__enabled:
       description: Enable the Prometheus-compatible /metrics endpoint.
-      default: true
-      type: boolean
-    forgejo__metrics__enabled_issue_by_label:
-      description: Include per-label issue counts in the metrics output.
-      default: true
-      type: boolean
-    forgejo__metrics__enabled_issue_by_repository:
-      description: Include per-repository issue counts in the metrics output.
-      default: true
-      type: boolean
-    forgejo__cron__update_checker__enabled:
-      description: Enable the periodic Forgejo update-checker cron job.
       default: true
       type: boolean
     forgejo__repository__signing__default_trust_model:
