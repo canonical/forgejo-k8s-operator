@@ -326,7 +326,6 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
             additional_env = self._build_additional_env(domain, protocol, tls_ready)
             env_vars = map_config_to_env_vars(self, **additional_env)
-            self._configure_ingress(domain, tls_ready)
             self._configure_prometheus(env_vars)
 
             self._apply_pebble_layer(env_vars)
