@@ -418,6 +418,7 @@ config:
         Enable the proxy if true; all requests to external sources via HTTP
         will be affected. If false, no proxy will be used, even if the
         model's Juju proxy config (juju-http-proxy/juju-https-proxy) is set.
+      default: false
       type: boolean
 
 assumes:
