@@ -183,7 +183,7 @@ config:
       description: |
         Disabled features for users, could be deletion, manage_ssh_keys, manage_gpg_keys, manage_password
 
-        This applies onlyonly  to users authenticated via OpenID or OAuth2.
+        This applies only to users authenticated via OpenID or OAuth2.
       default: ""
       type: string
     forgejo__openid__enable_openid_signin:
