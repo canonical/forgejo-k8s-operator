@@ -108,8 +108,7 @@ def test_config_propagates_to_env_vars(monkeypatch: pytest.MonkeyPatch):
     state_in = testing.State(
         containers={container_in},
         config={
-            "forgejo__log__level": "Debug",
-            "forgejo__repository__pull_request__default_merge_style": "rebase",
+            "log-level": "Debug",
         },
     )
     monkeypatch.setattr(
@@ -121,8 +120,6 @@ def test_config_propagates_to_env_vars(monkeypatch: pytest.MonkeyPatch):
     env = state_out.get_container("forgejo").plan.services[SERVICE_NAME].environment
     # Standard mapping
     assert env.get("FORGEJO__LOG__LEVEL") == "Debug"
-    # Override mapping: dot in Forgejo section name encoded as _0X2E_
-    assert env.get("FORGEJO__REPOSITORY_0X2E_PULL-REQUEST__DEFAULT_MERGE_STYLE") == "rebase"
 
 
 def test_metrics_scrape_jobs_no_token(monkeypatch: pytest.MonkeyPatch):
@@ -157,7 +154,7 @@ def test_metrics_scrape_jobs_with_token(monkeypatch: pytest.MonkeyPatch):
         containers={container_in},
         relations={metrics_relation},
         secrets={secret},
-        config={"forgejo__metrics__token": secret.id},
+        config={"metrics-token": secret.id},
         leader=True,
     )
     monkeypatch.setattr(
@@ -188,7 +185,7 @@ def test_secret_changed_triggers_reconcile(monkeypatch: pytest.MonkeyPatch):
     state_in = testing.State(
         containers={container_in},
         secrets={secret},
-        config={"forgejo__security__secret_key": secret.id},
+        config={"security-secret-key": secret.id},
     )
     monkeypatch.setattr(
         CharmForgejoCharm, "_forgejo_version", property(lambda self: mock_get_version())

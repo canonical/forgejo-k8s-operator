@@ -56,6 +56,20 @@ Date: Tue, 02 Sep 2025 19:40:37 GMT
 
 Run `juju run <unit> <action> --help` (or see `charmcraft.yaml`) for parameters and defaults.
 
+## Configuration
+
+Config option names follow the pattern `<forgejo-section>-<key>` in
+kebab-case (e.g. `server-domain`, `service-disable-registration`,
+`session-provider`), corresponding to the `[section] KEY` they set in
+Forgejo's `app.ini`. Options that map to Forgejo's top-level `[DEFAULT]`
+section (e.g. `app-name`) have no section prefix.
+
+Run `juju config forgejo-k8s` to see the full list of options, their
+descriptions, defaults, and current values. Options of type `secret`
+(e.g. `security-secret-key`, `metrics-token`) expect a Juju secret URI —
+create one with `juju add-secret` and grant it to the application, or
+`juju config forgejo-k8s <option>=secret:<id>`.
+
 ## Known limitations and deviations from non-charmed Forgejo
 
 * Only PostgreSQL is supported as a database backend (via the `postgresql_client` interface);

@@ -91,7 +91,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         # TLS certificates support
         self.cert_handler = CertHandler(
             self,
-            common_name=str(self.model.config.get("forgejo__server__domain") or self.app.name),
+            common_name=str(self.model.config.get("server-domain") or self.app.name),
             events=[self.on.config_changed, self.on.forgejo_pebble_ready],
         )
         framework.observe(
@@ -143,9 +143,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         # If nothing is wrong, report active.
         if config:
             scheme = "https" if self._tls_enabled else "http"
-            event.add_status(
-                ops.ActiveStatus(f"Serving at {scheme}://{config.forgejo__server__domain}")
-            )
+            event.add_status(ops.ActiveStatus(f"Serving at {scheme}://{config.server_domain}"))
         else:
             event.add_status(ops.ActiveStatus())
 
@@ -156,8 +154,8 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
             config = self.load_config(ForgejoConfig)
         except ValueError as e:
             event.add_status(ops.BlockedStatus(str(e)))
-        if config and not config.forgejo__server__domain:
-            event.add_status(ops.BlockedStatus("forgejo__server__domain config needs to be set"))
+        if config and not config.server_domain:
+            event.add_status(ops.BlockedStatus("server-domain config needs to be set"))
         return config
 
     def _collect_database_status(self, event: ops.CollectStatusEvent) -> None:
@@ -267,19 +265,20 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         - Relation configuration.
         """
         env: dict = {
-            # Top-level (DEFAULT section)
             "FORGEJO____RUN_USER": "git",
             "FORGEJO____WORK_PATH": "/data/gitea",
-            # Repository root
             "FORGEJO__REPOSITORY__ROOT": "/data/gitea/data/forgejo-repositories",
             "FORGEJO__SERVER__APP_DATA_PATH": "/data/gitea/data",
+            "FORGEJO__SERVER__SSH_LISTEN_PORT": "2222",
+            "FORGEJO__SERVER__LFS_START_SERVER": "true",
+            "FORGEJO__OTHER__SHOW_FOOTER_VERSION": "false",
             **self._get_proxy_env(),
             **self._fetch_postgres_relation_data(),
             **self._fetch_s3_relation_data(),
         }
         # ROOT_URL is computed from protocol+domain unless the user
         # has explicitly set it via Juju config (empty string = use computed value).
-        if not self.config.get("forgejo__server__root_url", ""):
+        if not self.config.get("server-root-url", ""):
             env["FORGEJO__SERVER__ROOT_URL"] = f"{protocol}://{domain}/"
 
         ingress_cfg = TraefikSSHConfig.from_charm_config(self.config)
@@ -320,7 +319,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
 
         try:
             tls_ready = self.cert_handler.configure_certs()
-            domain = config.forgejo__server__domain
+            domain = config.server_domain
             protocol = "https" if tls_ready else "http"
 
             self.set_ports()

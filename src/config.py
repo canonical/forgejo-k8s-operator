@@ -12,10 +12,44 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_valid
 
 logger = logging.getLogger(__name__)
 
-# Explicit env var name overrides for Juju config options
-_CONFIG_KEY_OVERRIDES: dict[str, str] = {
-    "forgejo__repository__signing__default_trust_model": "FORGEJO__REPOSITORY_0X2E_SIGNING__DEFAULT_TRUST_MODEL",  # noqa: E501
-    "forgejo__repository__pull_request__default_merge_style": "FORGEJO__REPOSITORY_0X2E_PULL-REQUEST__DEFAULT_MERGE_STYLE",  # noqa: E501
+# Explicit mapping of Juju config option names (kebab-case, as declared in
+# charmcraft.yaml) to the FORGEJO__SECTION__KEY environment variable that
+# environment-to-ini expects. Every option must have an entry here.
+_CONFIG_KEY_TO_ENV_VAR: dict[str, str] = {
+    "log-level": "FORGEJO__LOG__LEVEL",
+    "server-domain": "FORGEJO__SERVER__DOMAIN",
+    "openid-whitelisted-uris": "FORGEJO__OPENID__WHITELISTED_URIS",
+    "server-disable-ssh": "FORGEJO__SERVER__DISABLE_SSH",
+    "service-disable-registration": "FORGEJO__SERVICE__DISABLE_REGISTRATION",
+    "service-require-signin-view": "FORGEJO__SERVICE__REQUIRE_SIGNIN_VIEW",
+    "service-default-allow-create-organization": "FORGEJO__SERVICE__DEFAULT_ALLOW_CREATE_ORGANIZATION",  # noqa: E501
+    "admin-disable-regular-org-creation": "FORGEJO__ADMIN__DISABLE_REGULAR_ORG_CREATION",
+    "admin-user-disabled-features": "FORGEJO__ADMIN__USER_DISABLED_FEATURES",
+    "admin-external-user-disabled-features": "FORGEJO__ADMIN__EXTERNAL_USER_DISABLE_FEATURES",
+    "service-default-user-visibility": "FORGEJO__SERVICE__DEFAULT_USER_VISIBILITY",
+    "service-default-org-visibility": "FORGEJO__SERVICE__DEFAULT_ORG_VISIBILITY",
+    "explore-disable-users-page": "FORGEJO__SERVICE_0X2E_EXPLORE__DISABLE_USERS_PAGE",
+    "explore-disable-organizations-page": "FORGEJO__SERVICE_0X2E_EXPLORE__DISABLE_ORGANIZATIONS_PAGE",  # noqa: E501
+    "explore-disable-code-page": "FORGEJO__SERVICE_0X2E_EXPLORE__DISABLE_CODE_PAGE",
+    "app-name": "FORGEJO____APP_NAME",
+    "app-slogan": "FORGEJO____APP_SLOGAN",
+    "server-ssh-port": "FORGEJO__SERVER__SSH_PORT",
+    "server-root-url": "FORGEJO__SERVER__ROOT_URL",
+    "mailer-enabled": "FORGEJO__MAILER__ENABLED",
+    "service-register-email-confirm": "FORGEJO__SERVICE__REGISTER_EMAIL_CONFIRM",
+    "service-register-manual-confirm": "FORGEJO__SERVICE__REGISTER_MANUAL_CONFIRM",
+    "service-enable-notify-mail": "FORGEJO__SERVICE__ENABLE_NOTIFY_MAIL",
+    "service-allow-only-external-registration": "FORGEJO__SERVICE__ALLOW_ONLY_EXTERNAL_REGISTRATION",  # noqa: E501
+    "session-provider": "FORGEJO__SESSION__PROVIDER",
+    "oauth2-enabled": "FORGEJO__OAUTH2__ENABLED",
+    "metrics-enabled": "FORGEJO__METRICS__ENABLED",
+    "migrations-allowed-domains": "FORGEJO__MIGRATIONS__ALLOWED_DOMAINS",
+    "packages-enabled": "FORGEJO__PACKAGES__ENABLED",
+    "security-secret-key": "FORGEJO__SECURITY__SECRET_KEY",
+    "security-internal-token": "FORGEJO__SECURITY__INTERNAL_TOKEN",
+    "server-lfs-jwt-secret": "FORGEJO__SERVER__LFS_JWT_SECRET",
+    "metrics-token": "FORGEJO__METRICS__TOKEN",
+    "proxy-enabled": "FORGEJO__PROXY__PROXY_ENABLED",
 }
 
 
@@ -43,12 +77,9 @@ def map_config_to_env_vars(
 ):
     """Map charm config values to FORGEJO__SECTION__KEY environment variables.
 
-    For each config key the env var name is determined as follows:
-    - If the key is present in *key_overrides*, the corresponding value is used
-      as the env var name. Use this for Forgejo sections whose names contain
-      characters that Juju config option names cannot represent.
-    - Otherwise the standard transform applies to keys starting with
-      "forgejo__": ``k.upper()``
+    Each Juju config key is looked up in *_CONFIG_KEY_TO_ENV_VAR* to determine
+    its corresponding environment variable name; keys with no entry there
+    (e.g. unrelated charm-internal state) are ignored.
 
     The returned dict merges the mapped config with *additional_env*; values in
     *additional_env* take precedence (allowing computed/relational values to
@@ -56,17 +87,15 @@ def map_config_to_env_vars(
     """
     env_mapped_config = {}
     for k, v in charm.config.items():
+        env_key = _CONFIG_KEY_TO_ENV_VAR.get(k)
+        if env_key is None:
+            continue
         if str(v).startswith("secret:"):
             secret = _fetch_secret(charm, str(v))
             if secret is None:
                 continue
             v = secret
-        if k in _CONFIG_KEY_OVERRIDES:
-            env_key = _CONFIG_KEY_OVERRIDES[k]
-            env_mapped_config[env_key] = v
-        elif k.startswith("forgejo__"):
-            env_key = k.upper()
-            env_mapped_config[env_key] = v
+        env_mapped_config[env_key] = v
 
     return {**env_mapped_config, **additional_env}
 
@@ -76,14 +105,11 @@ class ForgejoConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
-    forgejo__log__level: Literal[
-        "Trace", "Debug", "Info", "Warn", "Error", "Critical", "Fatal", "None"
-    ]
-    forgejo__server__domain: str
-    forgejo__service__default_user_visibility: Literal["public", "limited", "private"]
-    forgejo__service__default_org_visibility: Literal["public", "limited", "private"]
-    forgejo____run_mode: Literal["prod", "dev"]
-    forgejo__session__provider: Literal[
+    log_level: Literal["Trace", "Debug", "Info", "Warn", "Error", "Critical", "Fatal", "None"]
+    server_domain: str
+    service_default_user_visibility: Literal["public", "limited", "private"]
+    service_default_org_visibility: Literal["public", "limited", "private"]
+    session_provider: Literal[
         "memory",
         "file",
         "redis",
@@ -93,12 +119,6 @@ class ForgejoConfig(BaseModel):
         "couchbase",
         "memcache",
         "postgres",
-    ]
-    forgejo__repository__signing__default_trust_model: Literal[
-        "collaborator", "committer", "collaboratorcommitter"
-    ]
-    forgejo__repository__pull_request__default_merge_style: Literal[
-        "merge", "rebase", "rebase-merge", "squash", "fast-forward-only"
     ]
 
 
@@ -157,7 +177,9 @@ class TraefikSSHConfig(BaseModel):
     def from_charm_config(cls, config: ops.ConfigData) -> "TraefikSSHConfig":
         """Build from the charm's live config."""
         return cls(
-            ssh_enabled=not bool(config.get("forgejo__server__disable_ssh", False)),
-            ssh_port=int(config.get("forgejo__server__ssh_port", 2222)),
-            ssh_listen_port=int(config.get("forgejo__server__ssh_listen_port", 2222)),
+            ssh_enabled=not bool(config.get("server-disable-ssh", False)),
+            ssh_port=int(config.get("server-ssh-port", 2222)),
+            # Not user-configurable: the built-in SSH server always listens on
+            # 2222 inside the container.
+            ssh_listen_port=2222,
         )

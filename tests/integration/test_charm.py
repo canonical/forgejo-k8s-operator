@@ -52,7 +52,7 @@ def test_metrics_bearer_token(deployed_app, juju: jubilant.Juju):
     logger.info("Created Juju secret %s", secret_uri)
     juju.grant_secret(secret_uri, APP_NAME)
 
-    juju.config(APP_NAME, {"forgejo__metrics__token": secret_uri})
+    juju.config(APP_NAME, {"metrics-token": secret_uri})
     juju.wait(lambda status: jubilant.all_active(status, APP_NAME), timeout=120)
 
     # In microk8s, pod IPs are directly routable from the host.
@@ -89,5 +89,5 @@ def test_metrics_bearer_token(deployed_app, juju: jubilant.Juju):
         assert resp.status == 200, f"Expected 200 with correct bearer token, got {resp.status}"
 
     # Teardown: remove the token so the deploy is clean for any later tests.
-    juju.config(APP_NAME, reset=["forgejo__metrics__token"])
+    juju.config(APP_NAME, reset=["metrics-token"])
     juju.wait(lambda status: jubilant.all_active(status, APP_NAME), timeout=120)
