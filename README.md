@@ -46,34 +46,107 @@ Date: Tue, 02 Sep 2025 19:40:37 GMT
 
 ## Actions
 
-* `create-admin-user` — create a Forgejo admin user with a random password (returned in the
-  action output; treat it as sensitive, e.g. rotate it or store it in a Juju secret).
-* `generate-user-token` — generate an API access token for an existing Forgejo user.
-* `reset-user-password` — set an explicit new password for an existing Forgejo user (the
-  `password` parameter, not a random one; it will appear in `juju show-task` output).
-* `generate-runner-secret` — generate and register a registration secret for a Forgejo Actions
-  runner (globally, or scoped to an owner/repo).
+All actions run the Forgejo CLI inside the workload container as the `git` user.
 
-Run `juju run <unit> <action> --help` (or see `charmcraft.yaml`) for parameters and defaults.
+| Action | Parameters | Result |
+| --- | --- | --- |
+| `create-admin-user` | `username`, `email` | Creates an admin user with a random password. |
+| `generate-user-token` | `username`, `token-name`, `scopes` | Returns an API access token for an existing user. |
+| `reset-user-password` | `username`, `password` | Sets the given password on an existing user. |
+| `generate-runner-secret` | `name`, `labels`, `scope` | Registers a Forgejo Actions runner and returns its secret. |
+
+Action output (passwords, tokens, runner secrets) is stored in the Juju task log and is
+visible with `juju show-task`; treat it as sensitive and rotate or change it after use.
+`reset-user-password` takes the password as a plain parameter, so it is also visible there.
 
 ## Configuration
 
-Config option names follow the pattern `<forgejo-section>-<key>` in
-kebab-case (e.g. `server-domain`, `service-disable-registration`,
-`session-provider`), corresponding to the `[section] KEY` they set in
-Forgejo's `app.ini`. Options that map to Forgejo's top-level `[DEFAULT]`
-section (e.g. `app-name`) have no section prefix.
+Config option names follow the pattern `<forgejo-section>-<key>` in kebab-case
+(e.g. `server-domain` sets `[server] DOMAIN`). Options for Forgejo's top-level section
+(e.g. `app-name`) have no section prefix.
+See the Forgejo
+[configuration cheat sheet](https://forgejo.org/docs/latest/admin/config-cheat-sheet/)
+for the full meaning of each setting.
 
-Run `juju config forgejo-k8s` to see the full list of options, their
-descriptions, defaults, and current values. Options of type `secret`
-(e.g. `security-secret-key`, `metrics-token`) expect a Juju secret URI —
-create one with `juju add-secret` and grant it to the application, or
-`juju config forgejo-k8s <option>=secret:<id>`.
+Settings not listed below cannot be changed through the charm.
+
+### General and logging
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `app-name` | `Forgejo` | Instance name shown in the UI. |
+| `app-slogan` | `Beyond coding. We Forge.` | Slogan shown below the name. |
+| `log-level` | `Info` | One of `Trace`, `Debug`, `Info`, `Warn`, `Error`, `Critical`, `Fatal`, `None`. |
+| `proxy-enabled` | `false` | Route Forgejo's outbound HTTP(S) requests through the proxy configured in the model (`juju-http-proxy`, `juju-https-proxy`, `juju-no-proxy`). |
+
+### Server, URLs and SSH
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `server-domain` | `forgejo.internal` | Domain used to build Forgejo's URL. Must not be empty. With ingress, this is the hostname Traefik routes on. |
+| `server-root-url` | `""` | Overrides the public root URL. Empty means `http(s)://<server-domain>/`, with the scheme following the TLS state. |
+| `server-disable-ssh` | `false` | Disable Git-over-SSH. |
+| `server-ssh-port` | `2222` | SSH port advertised to users in clone URLs. |
+
+### Users, registration and visibility
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `service-disable-registration` | `false` | Disable self-registration. |
+| `service-require-signin-view` | `false` | Require sign-in to view any page. |
+| `service-allow-only-external-registration` | `false` | Only allow registration via OAuth/OpenID. |
+| `service-register-email-confirm` | `false` | Require email confirmation to activate accounts (needs `mailer-enabled`). |
+| `service-register-manual-confirm` | `false` | Require manual admin approval of new accounts. |
+| `service-enable-notify-mail` | `false` | Send email notifications for issue and pull-request activity (needs `mailer-enabled`). |
+| `service-default-user-visibility` | `public` | Default visibility of new users: `public`, `limited` or `private`. |
+| `service-default-org-visibility` | `public` | Default visibility of new organizations: `public`, `limited` or `private`. |
+| `service-default-allow-create-organization` | `true` | Let new users create organizations. |
+| `admin-disable-regular-org-creation` | `false` | Only admins may create organizations. |
+| `admin-user-disabled-features` | `""` | Features disabled for users: `deletion`, `manage_ssh_keys`, `manage_gpg_keys`, `manage_password`. |
+| `admin-external-user-disabled-features` | `""` | Same, for users authenticated via OpenID/OAuth2 only. |
+| `openid-whitelisted-uris` | `""` | Comma-separated OpenID URIs allowed for sign-in/sign-up. Empty means no restriction. |
+| `oauth2-enabled` | `true` | Enable Forgejo as an OAuth2 provider. |
+| `session-provider` | `file` | Session backend: `file`, `db`, `memory`. |
+
+### Explore pages
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `explore-disable-users-page` | `false` | Disable the users explore page. |
+| `explore-disable-organizations-page` | `false` | Disable the organizations explore page. |
+| `explore-disable-code-page` | `false` | Disable the code explore page. |
+
+### Features
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `mailer-enabled` | `false` | Enable the mailer. |
+| `packages-enabled` | `true` | Enable the package registry. |
+| `metrics-enabled` | `true` | Expose `/metrics`. |
+| `migrations-allowed-domains` | `""` | Comma-separated hosts repositories may be migrated from (wildcards supported). Empty allows all. |
+
+### Secrets
+
+These options take a Juju secret whose content has a `value` key. Grant the secret to the
+application and pass its ID:
+
+| Option | Forgejo setting |
+| --- | --- |
+| `security-secret-key` | `[security] SECRET_KEY` |
+| `security-internal-token` | `[security] INTERNAL_TOKEN` |
+| `server-lfs-jwt-secret` | `[server] LFS_JWT_SECRET` |
+| `metrics-token` | `[metrics] TOKEN`; also used as the bearer token in the Prometheus scrape job. |
+
+A secret that cannot be read, or has no `value` key, is skipped and Forgejo falls back to its
+own behaviour for that setting. Changes to the secret content are picked up automatically.
 
 ## Known limitations and deviations from non-charmed Forgejo
 
 * Only PostgreSQL is supported as a database backend (via the `postgresql_client` interface);
   SQLite/MySQL are not wired up.
+* Only a subset of Forgejo's settings is exposed as charm config (see above).
+* `server-ssh-port` only changes the port advertised to users; the server listens on 2222
+  internally and the charm exposes Git-over-SSH through Traefik.
 * Configuration changes are applied by rewriting Forgejo's `app.ini` file and replanning the
   Pebble service; some settings may require a Forgejo restart to fully take effect (handled
   automatically by the charm, but there is a short window of unavailability).
