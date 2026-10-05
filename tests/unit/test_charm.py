@@ -108,8 +108,7 @@ def test_config_propagates_to_env_vars(monkeypatch: pytest.MonkeyPatch):
     state_in = testing.State(
         containers={container_in},
         config={
-            "forgejo__log__level": "Debug",
-            "forgejo__repository__pull_request__default_merge_style": "rebase",
+            "log-level": "Debug",
         },
     )
     monkeypatch.setattr(
@@ -121,8 +120,6 @@ def test_config_propagates_to_env_vars(monkeypatch: pytest.MonkeyPatch):
     env = state_out.get_container("forgejo").plan.services[SERVICE_NAME].environment
     # Standard mapping
     assert env.get("FORGEJO__LOG__LEVEL") == "Debug"
-    # Override mapping: dot in Forgejo section name encoded as _0X2E_
-    assert env.get("FORGEJO__REPOSITORY_0X2E_PULL-REQUEST__DEFAULT_MERGE_STYLE") == "rebase"
 
 
 def test_metrics_scrape_jobs_no_token(monkeypatch: pytest.MonkeyPatch):
@@ -157,7 +154,7 @@ def test_metrics_scrape_jobs_with_token(monkeypatch: pytest.MonkeyPatch):
         containers={container_in},
         relations={metrics_relation},
         secrets={secret},
-        config={"forgejo__metrics__token": secret.id},
+        config={"metrics-token": secret.id},
         leader=True,
     )
     monkeypatch.setattr(
@@ -188,7 +185,7 @@ def test_secret_changed_triggers_reconcile(monkeypatch: pytest.MonkeyPatch):
     state_in = testing.State(
         containers={container_in},
         secrets={secret},
-        config={"forgejo__security__secret_key": secret.id},
+        config={"security-secret-key": secret.id},
     )
     monkeypatch.setattr(
         CharmForgejoCharm, "_forgejo_version", property(lambda self: mock_get_version())
@@ -205,8 +202,8 @@ _MOCK_DB_DATA = {
 }
 
 
-def test_database_name_plain_when_exec_mode_unset(monkeypatch: pytest.MonkeyPatch):
-    """FORGEJO__DATABASE__NAME is the plain database name when exec mode config is empty."""
+def test_database_name_is_plain(monkeypatch: pytest.MonkeyPatch):
+    """FORGEJO__DATABASE__NAME is the plain database name with no query parameters."""
     ctx = testing.Context(CharmForgejoCharm)
     container_in = testing.Container(
         "forgejo",
@@ -225,32 +222,4 @@ def test_database_name_plain_when_exec_mode_unset(monkeypatch: pytest.MonkeyPatc
     db_name = env.get("FORGEJO__DATABASE__NAME")
 
     assert isinstance(db_name, str), "DATABASE NAME must be a string, not a tuple"
-    assert "?" not in db_name, "No query parameters expected when exec mode is not configured"
-
-
-def test_database_name_includes_exec_mode_when_configured(monkeypatch: pytest.MonkeyPatch):
-    """FORGEJO__DATABASE__NAME includes ?default_query_exec_mode when config is set."""
-    ctx = testing.Context(CharmForgejoCharm)
-    container_in = testing.Container(
-        "forgejo",
-        can_connect=True,
-        layers={"base": layer},
-        service_statuses={SERVICE_NAME: pebble.ServiceStatus.INACTIVE},
-    )
-    state_in = testing.State(
-        containers={container_in},
-        config={"database-default-query-exec-mode": "cache_describe"},
-    )
-    monkeypatch.setattr(
-        CharmForgejoCharm, "_forgejo_version", property(lambda self: mock_get_version())
-    )
-    monkeypatch.setattr(DatabaseRequires, "fetch_relation_data", lambda self, **kw: _MOCK_DB_DATA)
-
-    state_out = ctx.run(ctx.on.config_changed(), state_in)
-    env = state_out.get_container("forgejo").plan.services[SERVICE_NAME].environment
-    db_name = env.get("FORGEJO__DATABASE__NAME")
-
-    assert isinstance(db_name, str), "DATABASE NAME must be a string, not a tuple"
-    assert db_name.endswith("?default_query_exec_mode=cache_describe"), (
-        f"Expected pgx exec mode parameter in DATABASE NAME, got: {db_name!r}"
-    )
+    assert "?" not in db_name, "No query parameters expected"

@@ -6,14 +6,11 @@ import pytest
 from config import ForgejoConfig, ForgejoStorageConfig, map_config_to_env_vars
 
 VALID_KWARGS = {
-    "forgejo__log__level": "Info",
-    "forgejo__server__domain": "example.com",
-    "forgejo__service__default_user_visibility": "public",
-    "forgejo__service__default_org_visibility": "public",
-    "forgejo____run_mode": "prod",
-    "forgejo__session__provider": "db",
-    "forgejo__repository__signing__default_trust_model": "collaborator",
-    "forgejo__repository__pull_request__default_merge_style": "merge",
+    "log_level": "Info",
+    "server_domain": "example.com",
+    "service_default_user_visibility": "public",
+    "service_default_org_visibility": "public",
+    "session_provider": "db",
 }
 
 
@@ -25,13 +22,10 @@ def test_forgejo_config_valid():
 @pytest.mark.parametrize(
     "field, invalid_value",
     [
-        ("forgejo__log__level", "VERBOSE"),
-        ("forgejo__service__default_user_visibility", "hidden"),
-        ("forgejo__service__default_org_visibility", "hidden"),
-        ("forgejo____run_mode", "staging"),
-        ("forgejo__session__provider", "sqlite"),
-        ("forgejo__repository__signing__default_trust_model", "everyone"),
-        ("forgejo__repository__pull_request__default_merge_style", "cherry-pick"),
+        ("log_level", "VERBOSE"),
+        ("service_default_user_visibility", "hidden"),
+        ("service_default_org_visibility", "hidden"),
+        ("session_provider", "sqlite"),
     ],
 )
 def test_forgejo_config_invalid(field, invalid_value):
@@ -117,7 +111,7 @@ def _make_mock_charm_error(secret_id: str, error=None) -> MagicMock:
 def test_map_config_to_env_vars_resolves_secrets():
     """map_config_to_env_vars resolves secret-valued config keys into plaintext env vars."""
     charm = _make_mock_charm("secret:xyz789", {"value": "resolved-secret-value"})
-    charm.config = {"forgejo__security__secret_key": "secret:xyz789"}
+    charm.config = {"security-secret-key": "secret:xyz789"}
     env = map_config_to_env_vars(charm)
     assert env.get("FORGEJO__SECURITY__SECRET_KEY") == "resolved-secret-value"
 
@@ -125,7 +119,7 @@ def test_map_config_to_env_vars_resolves_secrets():
 def test_map_config_to_env_vars_skips_unresolvable_secrets():
     """map_config_to_env_vars omits env vars whose secret cannot be resolved."""
     charm = _make_mock_charm_error("secret:bad", error=ops.SecretNotFoundError("secret:bad"))
-    charm.config = {"forgejo__security__secret_key": "secret:bad"}
+    charm.config = {"security-secret-key": "secret:bad"}
     env = map_config_to_env_vars(charm)
     assert "FORGEJO__SECURITY__SECRET_KEY" not in env
 
@@ -133,6 +127,6 @@ def test_map_config_to_env_vars_skips_unresolvable_secrets():
 def test_map_config_to_env_vars_skips_missing_value_key():
     """map_config_to_env_vars omits env vars when the secret has no 'value' key."""
     charm = _make_mock_charm("secret:noval", {"wrong_key": "oops"})
-    charm.config = {"forgejo__security__secret_key": "secret:noval"}
+    charm.config = {"security-secret-key": "secret:noval"}
     env = map_config_to_env_vars(charm)
     assert "FORGEJO__SECURITY__SECRET_KEY" not in env
