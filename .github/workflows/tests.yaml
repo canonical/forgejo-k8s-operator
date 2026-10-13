@@ -1,6 +1,10 @@
 name: Tests
 
 on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
   workflow_call:
     inputs:
       commit_sha:
