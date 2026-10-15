@@ -267,6 +267,7 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         env: dict = {
             "FORGEJO____RUN_USER": "git",
             "FORGEJO____WORK_PATH": "/data/gitea",
+            "FORGEJO__SECURITY__INSTALL_LOCK": "true",
             "FORGEJO__REPOSITORY__ROOT": "/data/gitea/data/forgejo-repositories",
             "FORGEJO__SERVER__APP_DATA_PATH": "/data/gitea/data",
             "FORGEJO__SERVER__SSH_LISTEN_PORT": "2222",
