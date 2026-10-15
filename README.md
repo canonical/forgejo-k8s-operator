@@ -77,7 +77,7 @@ Settings not listed below cannot be changed through the charm.
 | `app-name` | `Forgejo` | Instance name shown in the UI. |
 | `app-slogan` | `Beyond coding. We Forge.` | Slogan shown below the name. |
 | `log-level` | `Info` | One of `Trace`, `Debug`, `Info`, `Warn`, `Error`, `Critical`, `Fatal`, `None`. |
-| `proxy-enabled` | `false` | Route Forgejo's outbound HTTP(S) requests through the proxy configured in the model (`juju-http-proxy`, `juju-https-proxy`, `juju-no-proxy`). |
+| `proxy-enabled` | `false` | Route Forgejo's outbound HTTP(S) requests through the proxy configured in the model (`juju-http-proxy`, `juju-https-proxy`, `juju-no-proxy`). Not enabled automatically: set it to `true` for the model proxy to be used. |
 
 ### Server, URLs and SSH
 
