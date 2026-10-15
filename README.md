@@ -1,4 +1,4 @@
-# forgejo-k8s-operator
+# forgejo-k8s
 
 Charmed k8s operator for forgejo.
 
@@ -21,7 +21,7 @@ juju integrate forgejo-k8s traefik-k8s
 
 ```console
 Unit               Workload  Agent  Address      Ports  Message
-forgejo-k8s/0*     active    idle   10.1.131.36         Serving at forgejo.internal
+forgejo-k8s/0*     active    idle   10.1.131.36         Serving at http://forgejo.internal
 postgresql-k8s/0*  active    idle   10.1.131.7          Primary
 traefik-k8s/0*     active    idle   10.1.131.37         Serving at internal
 ````
