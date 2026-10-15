@@ -88,7 +88,7 @@ def on_generate_user_token(event: ops.ActionEvent, container: ops.Container) -> 
 
 
 def on_reset_user_password(event: ops.ActionEvent, container: ops.Container) -> None:
-    """Reset a Forgejo user's password to a new random value."""
+    """Reset a Forgejo user's password to the given value."""
     username = event.params.get("username")
     password = event.params.get("password")
     if not username:

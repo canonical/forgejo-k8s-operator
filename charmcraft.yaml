@@ -344,7 +344,7 @@ actions:
     additionalProperties: false
 
   reset-user-password:
-    description: Reset the password for a Forgejo user to a new random password.
+    description: Reset the password for a Forgejo user to the given password.
     params:
       username:
         type: string
