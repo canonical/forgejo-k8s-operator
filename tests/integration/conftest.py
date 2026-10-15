@@ -7,7 +7,7 @@ import jubilant
 import pytest
 import yaml
 
-DEFAULT_FORGEJO_IMAGE = "codeberg.org/forgejo/forgejo:15"
+DEFAULT_FORGEJO_IMAGE = "codeberg.org/forgejo/forgejo:16.0.6"
 
 METADATA = yaml.safe_load(pathlib.Path("./charmcraft.yaml").read_text())
 APP_NAME = METADATA["name"]
