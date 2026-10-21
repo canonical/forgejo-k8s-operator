@@ -135,6 +135,10 @@ config:
         the final url has both domains, like <forgejo-charm-config-domain>.<ingress-domain>
       default: "forgejo.internal"
       type: string
+    openid-enable:
+      description: Enable sign-in via OpenID.
+      default: true
+      type: boolean
     openid-whitelisted-uris:
       description: |
         Comma-separated list of OpenID URIs to whitelist for sign-in/sign-up.

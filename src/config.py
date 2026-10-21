@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 _CONFIG_KEY_TO_ENV_VAR: dict[str, str] = {
     "log-level": "FORGEJO__LOG__LEVEL",
     "server-domain": "FORGEJO__SERVER__DOMAIN",
+    "openid-enable": "FORGEJO__OPENID__ENABLE_OPENID_SIGNIN",
     "openid-whitelisted-uris": "FORGEJO__OPENID__WHITELISTED_URIS",
     "server-disable-ssh": "FORGEJO__SERVER__DISABLE_SSH",
     "service-disable-registration": "FORGEJO__SERVICE__DISABLE_REGISTRATION",

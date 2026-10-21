@@ -104,6 +104,7 @@ Settings not listed below cannot be changed through the charm.
 | `admin-disable-regular-org-creation` | `false` | Only admins may create organizations. |
 | `admin-user-disabled-features` | `""` | Features disabled for users: `deletion`, `manage_ssh_keys`, `manage_gpg_keys`, `manage_password`. |
 | `admin-external-user-disabled-features` | `""` | Same, for users authenticated via OpenID/OAuth2 only. |
+| `openid-enable` | `true` | Enable sign-in via OpenID. |
 | `openid-whitelisted-uris` | `""` | Comma-separated OpenID URIs allowed for sign-in/sign-up. Empty means no restriction. |
 | `oauth2-enabled` | `true` | Enable Forgejo as an OAuth2 provider. |
 | `session-provider` | `file` | Session backend: `file`, `db`, `memory`. |
