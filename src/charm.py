@@ -201,7 +201,12 @@ class ForgejoK8SOperatorCharm(ops.CharmBase):
         """
         if not self.container.can_connect():
             return None
-        version_output, _ = self.container.exec([FORGEJO_CLI, "--version"]).wait_output()
+        # Forgejo refuses to run as root.
+        version_output, _ = self.container.exec(
+            [FORGEJO_CLI, "--version"],
+            user=FORGEJO_SYSTEM_USER,
+            group=FORGEJO_SYSTEM_GROUP,
+        ).wait_output()
         # Output looks like this:
         # Forgejo version 11.0.3+gitea-1.22.0 (release name 11.0.3) built with ...
         result = re.search(r"version (\d*\.\d*\.\d*)", version_output)
