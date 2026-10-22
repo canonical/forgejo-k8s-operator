@@ -62,7 +62,7 @@ jobs:
 
   release:
     needs: [oci-image, charm]
-    uses: canonical/launchpad-actions/.github/workflows/release-charm.yaml@d37e57af16120fba0055931e77518a5f9edf7513
+    uses: canonical/launchpad-actions/.github/workflows/release-charm.yaml@972cb60c61e4e46d86442797ec5a6147064ec2c0
     secrets: inherit # zizmor: ignore[secrets-inherit]
     with:
       charm_cache_hit: ${{ needs.charm.outputs.cache_hit }}
