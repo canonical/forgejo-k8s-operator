@@ -46,7 +46,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: canonical/launchpad-actions/.github/workflows/oci-image.yaml@799f7ca218f01a8375713b1afb99935f9f9e272a
+    uses: canonical/launchpad-actions/.github/workflows/oci-image.yaml@0578ef5f6e42151a4852447f50a45aa574284275
     with:
       repo_url: ${{ inputs.upstream_url }}
       repo_branch: ${{ inputs.upstream_branch }}
